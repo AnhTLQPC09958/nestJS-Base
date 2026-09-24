@@ -7,6 +7,12 @@ export default () => ({
     nodeEnv: process.env.NODE_ENV,
     port: parseInt(process.env.PORT ?? '3000', 10),
   },
+  cors: {
+    origins: (process.env.CORS_ORIGINS ?? '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+  },
   database: {
     host: process.env.DB_HOST,
     port: parseInt(process.env.DB_PORT ?? '3306', 10),
