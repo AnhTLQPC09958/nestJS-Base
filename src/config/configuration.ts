@@ -9,7 +9,7 @@ export default () => ({
   },
   database: {
     host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_HOST ?? '3306', 10),
+    port: parseInt(process.env.DB_PORT ?? '3306', 10),
     username: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     name: process.env.DB_NAME,
@@ -17,7 +17,7 @@ export default () => ({
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET,
     accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN,
-    refreshSecret: process.env.JWT_REFRESH_EXPIRES_IN,
+    refreshSecret: process.env.JWT_REFRESH_SECRET,
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
   },
 });

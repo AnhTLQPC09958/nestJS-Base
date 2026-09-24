@@ -1,51 +1,51 @@
-# docker-compose.yml
-# File mô tả các container cần chạy cho dự án
-# Chạy: docker compose up -d
+# # docker-compose.yml
+# # File mô tả các container cần chạy cho dự án
+# # Chạy: docker compose up -d
 
-services:
-  mysql:
-    # Image tải từ Docker Hub — mysql:8.0 là LTS, ổn định
-    image: mysql:8.0
-    # Tên container hiển thị trong `docker ps`
-    container_name: nest-base-mysql
+# services:
+#   mysql:
+#     # Image tải từ Docker Hub — mysql:8.0 là LTS, ổn định
+#     image: mysql:8.0
+#     # Tên container hiển thị trong `docker ps`
+#     container_name: nest-base-mysql
 
-    # Tự khởi động lại khi máy reboot, trừ khi bạn chủ động stop
-    restart:
-      unless-stopped
+#     # Tự khởi động lại khi máy reboot, trừ khi bạn chủ động stop
+#     restart:
+#       unless-stopped
 
-      # Biến môi trường MySQL đọc lúc khởi tạo LẦN ĐẦU
-    # Chỉ có tác dụng khi volume còn TRỐNG
-    # Nếu đổi password sau này → phải `docker compose down -v` rồi up lại
+#       # Biến môi trường MySQL đọc lúc khởi tạo LẦN ĐẦU
+#     # Chỉ có tác dụng khi volume còn TRỐNG
+#     # Nếu đổi password sau này → phải `docker compose down -v` rồi up lại
 
-    environment:
-      MYSQL_ROOT_PASSWORD: root # password user root
-      MYSQL_DATABASE: nest_base # tự tạo DB này khi khởi động
-      MYSQL_USER: nest_user # User phụ
-      MYSQL_PASSWORD: nest_pass # password của nest_user
+#     environment:
+#       MYSQL_ROOT_PASSWORD: root # password user root
+#       MYSQL_DATABASE: nest_base # tự tạo DB này khi khởi động
+#       MYSQL_USER: nest_user # User phụ
+#       MYSQL_PASSWORD: nest_pass # password của nest_user
 
-    # Map cổng: <cổng_máy_tính>:<cổng_trong_container>
-    # Dùng 3307 thay vì 3306 để tránh conflict với MySQL trên máy
+#     # Map cổng: <cổng_máy_tính>:<cổng_trong_container>
+#     # Dùng 3307 thay vì 3306 để tránh conflict với MySQL trên máy
 
-    ports:
-      - '3307:3306'
-    # Volumes: dữ liệu MySQL lưu ỏ đây, xóa container vẫn còn
-    volumes:
-      - mysql_data:/var/lib/mysql
+#     ports:
+#       - '3307:3306'
+#     # Volumes: dữ liệu MySQL lưu ỏ đây, xóa container vẫn còn
+#     volumes:
+#       - mysql_data:/var/lib/mysql
 
-    # Config server: hỗ trợ tiếng việt + emoji
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
+#     # Config server: hỗ trợ tiếng việt + emoji
+#     command:
+#       - --character-set-server=utf8mb4
+#       - --collation-server=utf8mb4_unicode_ci
 
-    # HealthCheck: Docker ping MySQL mỗi 10s để biết còn hoạt động
-    # Quan trọng: NestJS sẽ chờ container healthy rồi mới connect
-    healthcheck:
-      test:
-        ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot']
-      interval: 1m30s
-      timeout: 30s
-      retries: 5
-      start_period: 30s
-# Khai báo volume — Docker tự quản lý ở ổ đĩa host
-volumes:
-  mysql_data:
+#     # HealthCheck: Docker ping MySQL mỗi 10s để biết còn hoạt động
+#     # Quan trọng: NestJS sẽ chờ container healthy rồi mới connect
+#     healthcheck:
+#       test:
+#         ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot']
+#       interval: 1m30s
+#       timeout: 30s
+#       retries: 5
+#       start_period: 30s
+# # Khai báo volume — Docker tự quản lý ở ổ đĩa host
+# volumes:
+#   mysql_data:

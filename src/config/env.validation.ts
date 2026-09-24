@@ -3,8 +3,7 @@
  * Nếu thiếu biến bắt buộc hoặc sai format → app CRASH ngay khi start.
  * Nguyên tắc: fail fast, không để lỗi ngầm chạy runtime.
  */
-
-import Joi from 'joi';
+import * as Joi from 'joi';
 
 export const envValidationSchema = Joi.object({
   // ===== APP =====
@@ -14,7 +13,7 @@ export const envValidationSchema = Joi.object({
   PORT: Joi.number().port().default(3000),
 
   // ===== DATABASE =====
-  DB_HOST: Joi.string().required,
+  DB_HOST: Joi.string().required(),
   DB_PORT: Joi.number().port().required(),
   DB_USER: Joi.string().required(),
   DB_PASSWORD: Joi.string().required(),
@@ -23,6 +22,6 @@ export const envValidationSchema = Joi.object({
   // ===== JWT =====
   JWT_ACCESS_SECRET: Joi.string().min(32).required(),
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
-  JWT_REFRESH_SECRET: Joi.string().min(32).required,
+  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 });

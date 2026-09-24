@@ -1,3 +1,3 @@
 export * from './config.module';
 export * from './configuration';
-export * from './env.validsation';
+export * from './env.validation';

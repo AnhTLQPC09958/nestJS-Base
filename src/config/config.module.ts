@@ -1,7 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import configuration from './configuration';
-import { envValidationSchema } from './env.validsation';
+import { envValidationSchema } from './env.validation';
 
 /**
  * Wrapper ConfigModule.
@@ -15,9 +15,6 @@ import { envValidationSchema } from './env.validsation';
       envFilePath: '.env',
       load: [configuration],
       validationSchema: envValidationSchema,
-      validationOptions: {
-        abortEarly: false,
-      },
     }),
   ],
 })
