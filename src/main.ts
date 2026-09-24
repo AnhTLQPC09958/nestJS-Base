@@ -46,7 +46,7 @@ async function bootstrap() {
 
   const port = configService.get<number>('app.port') ?? 3000;
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(port);
   console.log(`***** App running *****: http://localhost:${port}`);
   console.log(
     `***** CORS allowed *****: ${configService.get<string[]>('cors.origins')?.join(', ')}`,
