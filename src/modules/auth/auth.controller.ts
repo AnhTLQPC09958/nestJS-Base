@@ -15,7 +15,8 @@ import { LoginDto } from './dto/login.dto';
 import { ErrorCode } from 'src/common/constants';
 import type { Request, Response } from 'express';
 import ms, { StringValue } from 'ms';
-import { Public } from 'src/common/decorators';
+import { CurrentUser, Public } from 'src/common/decorators';
+import type { AuthUser } from 'src/common/types';
 const REFRESH_COOKIE = 'refresh_token';
 
 @Controller('auth')
@@ -70,13 +71,9 @@ export class AuthController {
   }
 
   @Get('me')
-  async me(@Req() req: Request) {
+  async me(@CurrentUser() user: AuthUser) {
     // Tạm thời lấy userId từ header — C5d sẽ thay bằng JWT Guard
-    const userId = Number(req.headers['x-user-id']);
-    if (!userId) {
-      throw new UnauthorizedException(ErrorCode.UNAUTHORIZED, 'Chưa đăng nhập');
-    }
-    return this.authService.getMe(userId);
+    return user;
   }
 
   // ===== HELPER =====
