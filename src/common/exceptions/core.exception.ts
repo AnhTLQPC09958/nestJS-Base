@@ -21,19 +21,28 @@ export class CoreException extends HttpException {
 // ===== Common =====
 
 export class ForbiddenException extends CoreException {
-  constructor(message = 'Bạn không có quyền thực hiện thao tác này') {
-    super(ErrorCode.FORBIDDEN, message, HttpStatus.FORBIDDEN);
+  constructor(
+    code: ErrorCode = ErrorCode.FORBIDDEN,
+    message = 'Bạn không có quyền thực hiện thao tác này',
+  ) {
+    super(code, message, HttpStatus.FORBIDDEN);
   }
 }
 
 export class UnauthorizedException extends CoreException {
-  constructor(message = 'Chưa đăng nhập hoặc token không hợp lệ') {
-    super(ErrorCode.UNAUTHORIZED, message, HttpStatus.UNAUTHORIZED);
+  constructor(
+    code: ErrorCode = ErrorCode.UNAUTHORIZED,
+    message = 'Chưa đăng nhập hoặc token không hợp lệ',
+  ) {
+    super(code, message, HttpStatus.UNAUTHORIZED);
   }
 }
 
 export class NotFoundException extends CoreException {
-  constructor(message = 'Không tìm thấy dữ liệu') {
-    super(ErrorCode.NOT_FOUND, message, HttpStatus.NOT_FOUND);
+  constructor(
+    code: ErrorCode = ErrorCode.NOT_FOUND,
+    message = 'Không tìm thấy dữ liệu',
+  ) {
+    super(code, message, HttpStatus.NOT_FOUND);
   }
 }

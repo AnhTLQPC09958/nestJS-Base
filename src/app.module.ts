@@ -22,7 +22,7 @@ import { JwtAuthGuard, PermissionGuard } from './common/guards';
     UserRolesModule,
     RolePermissionsModule,
     AuthModule,
-    SeedModule,
+    // SeedModule,
   ],
   controllers: [AppController],
   providers: [

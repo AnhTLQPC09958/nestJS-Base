@@ -13,5 +13,5 @@ export interface RequiredPermission {
  * VD: @CheckPermission('nguoi-dung', PermissionAction.CREATE)
  */
 export const CheckPermission = (module: string, action: PermissionAction) => {
-  SetMetadata(PERMISSION_KEY, { module, action } as RequiredPermission);
+  return SetMetadata(PERMISSION_KEY, { module, action });
 };
