@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { createHash, randomInt } from 'crypto';
 
 import { OtpToken, OtpPurpose } from './entities/otp-token.entity';
+import { BATCH_SIZE, OTP_CLEANUP_RETENTION_HOURS } from './types/otp.type';
 
 @Injectable()
 export class OtpService {
@@ -98,12 +99,37 @@ export class OtpService {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async cleanupExpired(): Promise<void> {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const result = await this.otpRepo.delete({
-      expiresAt: LessThan(cutoff),
-    });
-    if (result.affected && result.affected > 0) {
-      this.logger.log(`🧹 Cleaned up ${result.affected} expired OTPs`);
+    const cutoff = new Date(
+      Date.now() - OTP_CLEANUP_RETENTION_HOURS * 60 * 60 * 1000,
+    );
+    let totalDeleted = 0;
+
+    // Loop: xóa từng batch cho đến khi < BATCH_SIZE
+    while (true) {
+      const expired = await this.otpRepo.find({
+        select: { id: true },
+        where: { expiresAt: LessThan(cutoff) },
+        order: { id: 'ASC' },
+        take: BATCH_SIZE,
+      });
+
+      if (expired.length === 0) break;
+
+      const result = await this.otpRepo.delete({
+        id: In(expired.map(({ id }) => id)),
+      });
+      const affected = result.affected ?? 0;
+      totalDeleted += affected;
+
+      // Batch cuối → thoát
+      if (affected < BATCH_SIZE) break;
+
+      // Nghỉ 100ms nhường DB
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    if (totalDeleted > 0) {
+      this.logger.log(`🧹 Cleaned up ${totalDeleted} expired OTPs`);
     }
   }
 

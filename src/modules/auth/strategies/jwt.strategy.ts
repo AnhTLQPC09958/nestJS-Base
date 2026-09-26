@@ -33,7 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   async validate(req: Request, payload: JwtPayload): Promise<AuthUser> {
     // Lấy device_id từ header
-    const raw = req.headers['x-device-id'];
+    const raw = req.headers['device-id'];
     const headerDeviceId = Array.isArray(raw) ? raw[0] : raw;
 
     if (!headerDeviceId) {

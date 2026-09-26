@@ -7,7 +7,7 @@ import type { Request } from 'express';
 export const DeviceId = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): string | undefined => {
     const request = ctx.switchToHttp().getRequest<Request>();
-    const raw = request.headers['x-device-id'];
+    const raw = request.headers['device-id'];
     return Array.isArray(raw) ? raw[0] : raw;
   },
 );
