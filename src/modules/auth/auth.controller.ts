@@ -4,19 +4,29 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Req,
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
-import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
-import { LoginDto } from './dto/login.dto';
-import { ErrorCode } from 'src/common/constants';
 import type { Request, Response } from 'express';
-import ms, { StringValue } from 'ms';
-import { CurrentUser, Public } from 'src/common/decorators';
-import type { AuthUser } from 'src/common/types';
+import ms from 'ms';
+import type { StringValue } from 'ms';
+
+import { AuthService } from './auth.service';
+import {
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  LoginDto,
+  ResetPasswordDto,
+} from './dto/auth.dto';
+import { ErrorCode } from '../../common/constants';
+import { Public, CurrentUser, DeviceId } from '../../common/decorators';
+import { type AuthUser } from '../../common/types';
+import { CoreException } from '../../common/exceptions';
+
 const REFRESH_COOKIE = 'refresh_token';
 
 @Controller('auth')
@@ -31,14 +41,21 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
+    @DeviceId() deviceId: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
+    if (!deviceId) {
+      throw new CoreException(
+        ErrorCode.VALIDATION_FAILED,
+        'Thiếu header X-Device-Id',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     const { accessToken, refreshToken, permissions } =
-      await this.authService.login(dto);
+      await this.authService.login(dto, deviceId);
 
-    // set refresh token vào httpOnly cookie
     this.setRefreshCookie(res, refreshToken);
-
     return { accessToken, permissions };
   }
 
@@ -47,9 +64,18 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() req: Request,
+    @DeviceId() deviceId: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const token = req.cookies?.[REFRESH_COOKIE];
+    if (!deviceId) {
+      throw new CoreException(
+        ErrorCode.VALIDATION_FAILED,
+        'Thiếu header X-Device-Id',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const token = req.cookies?.[REFRESH_COOKIE] as string | undefined;
     if (!token) {
       throw new UnauthorizedException(
         ErrorCode.AUTH_REFRESH_TOKEN_MISSING,
@@ -57,9 +83,7 @@ export class AuthController {
       );
     }
 
-    const { accessToken } = await this.authService.refresh(token);
-
-    // Rotate refresh token (tùy chọn — bảo mật cao hơn)
+    const { accessToken } = await this.authService.refresh(token, deviceId);
     return { accessToken };
   }
 
@@ -70,13 +94,41 @@ export class AuthController {
     res.clearCookie(REFRESH_COOKIE, { path: '/' });
   }
 
-  @Get('me')
-  async me(@CurrentUser() user: AuthUser) {
-    // Tạm thời lấy userId từ header — C5d sẽ thay bằng JWT Guard
-    return user;
+  // ===== FORGOT PASSWORD =====
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.authService.forgotPassword(dto);
+    return {
+      message: 'Nếu email tồn tại, mã OTP đã được gửi đến hộp thư của bạn',
+    };
   }
 
-  // ===== HELPER =====
+  // ===== RESET PASSWORD =====
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.authService.resetPassword(dto);
+    return { message: 'Đặt lại mật khẩu thành công' };
+  }
+
+  // ===== CHANGE PASSWORD =====
+  @Patch('change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @CurrentUser('id') userId: number,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    await this.authService.changePassword(userId, dto);
+    return { message: 'Đổi mật khẩu thành công' };
+  }
+
+  @Get('me')
+  me(@CurrentUser() user: AuthUser) {
+    return user;
+  }
 
   private setRefreshCookie(res: Response, token: string): void {
     const isProd = this.config.get<string>('app.nodeEnv') === 'production';
@@ -84,12 +136,13 @@ export class AuthController {
       'jwt.refreshExpiresIn',
     );
     const maxAge = ms(refreshExpiresIn);
+
     res.cookie(REFRESH_COOKIE, token, {
       httpOnly: true,
       secure: isProd,
       sameSite: 'lax',
       path: '/',
-      maxAge: maxAge,
+      maxAge,
     });
   }
 }

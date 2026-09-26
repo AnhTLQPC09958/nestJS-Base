@@ -10,9 +10,13 @@ import { User } from '../users/entities/user.entity';
 import { UserRole } from '../user-roles/entities/user-role.entity';
 import { RolePermission } from '../role-permissions/entities/role-permission.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { MailModule } from '../mail/mail.module';
+import { OtpModule } from '../otp/otp.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, UserRole, RolePermission]),
+    MailModule,
+    OtpModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

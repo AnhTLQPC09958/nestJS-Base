@@ -26,4 +26,22 @@ export default () => ({
     refreshSecret: process.env.JWT_REFRESH_SECRET,
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
   },
+  upload: {
+    dest: process.env.UPLOAD_DEST,
+    maxSize: parseInt(process.env.UPLOAD_MAX_SIZE ?? '10485760', 10),
+  },
+  mail: {
+    host: process.env.MAIL_HOST,
+    port: parseInt(process.env.MAIL_PORT ?? '587', 10),
+    secure: process.env.MAIL_SECURE === 'true',
+    user: process.env.MAIL_USER,
+    pass: process.env.MAIL_PASS,
+    from: process.env.MAIL_FROM,
+    fromName: process.env.MAIL_FROM_NAME,
+  },
+  otp: {
+    length: parseInt(process.env.OTP_LENGTH ?? '6', 10),
+    expiresMinutes: parseInt(process.env.OTP_EXPIRES_MINUTES ?? '5', 10),
+    maxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS ?? '5', 10),
+  },
 });

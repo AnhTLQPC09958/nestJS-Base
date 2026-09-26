@@ -17,7 +17,7 @@ import { Paginate } from 'nestjs-paginate';
 import type { PaginateQuery } from 'nestjs-paginate';
 import { CreateUserDto, UpdateUserDto } from './dto';
 
-@Controller('users')
+@Controller('nguoi-dung')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

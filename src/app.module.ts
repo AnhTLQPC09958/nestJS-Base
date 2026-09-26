@@ -12,8 +12,13 @@ import { SeedModule } from './database/seeds';
 import { AuthModule } from './modules/auth/auth.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard, PermissionGuard } from './common/guards';
+import { UploadModule } from './modules/upload/upload.module';
+import { MailModule } from './modules/mail/mail.module';
+import { OtpModule } from './modules/otp/otp.module';
+import { ScheduleModule } from '@nestjs/schedule';
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule,
     DatabaseModule,
     PermissionsModule,
@@ -22,6 +27,10 @@ import { JwtAuthGuard, PermissionGuard } from './common/guards';
     UserRolesModule,
     RolePermissionsModule,
     AuthModule,
+    MailModule,
+    UploadModule,
+    MailModule,
+    OtpModule,
     // SeedModule,
   ],
   controllers: [AppController],

@@ -8,6 +8,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
  */
 @Module({
   imports: [
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -22,7 +23,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         autoLoadEntities: true,
 
         // Chỉ phật synchronize ở dev
-        synchronize: config.get<string>('app.nodeEnv') === 'development',
+        // synchronize: config.get<string>('app.nodeEnv') === 'development',
+        synchronize: false,
 
         // Log query khi dev
         logging:

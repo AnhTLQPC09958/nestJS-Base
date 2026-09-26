@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { config as loadEnv } from 'dotenv';
 import { DataSource } from 'typeorm';
+import { join } from 'path';
 
 // Load .env
 loadEnv();
@@ -11,6 +12,7 @@ loadEnv();
  * → Đọc trực tiếp process.env.
  */
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
 export const AppDataSource = new DataSource({
   type: 'mysql',
   host: process.env.DB_HOST,
@@ -20,8 +22,8 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_NAME,
 
   // Migration sẽ quét file trong src/database/migrations/
-  entities: ['src/**/*.entity.ts'],
-  migrations: ['src/database/migrations/*.ts'],
+  entities: [join(__dirname, '..', 'modules', '**', '*.entity.{ts,js}')],
+  migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
 
   // KHÔNG bật synchronize ở CLI — migration phải là nguồn sự thật
   synchronize: false,

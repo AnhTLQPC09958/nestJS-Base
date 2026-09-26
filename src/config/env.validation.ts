@@ -27,4 +27,22 @@ export const envValidationSchema = Joi.object({
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
   JWT_REFRESH_SECRET: Joi.string().min(32).required(),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+
+  // ===== UPLOAD =====
+  UPLOAD_DEST: Joi.string().required(),
+  UPLOAD_MAX_SIZE: Joi.number().integer().positive().required(),
+
+  // ===== MAIL =====
+  MAIL_HOST: Joi.string().required(),
+  MAIL_PORT: Joi.number().port().required(),
+  MAIL_SECURE: Joi.boolean().default(false),
+  MAIL_USER: Joi.string().email().required(),
+  MAIL_PASS: Joi.string().required(),
+  MAIL_FROM: Joi.string().email().required(),
+  MAIL_FROM_NAME: Joi.string().required(),
+
+  // ===== OTP =====
+  OTP_LENGTH: Joi.number().integer().min(4).max(8).default(6),
+  OTP_EXPIRES_MINUTES: Joi.number().integer().positive().default(5),
+  OTP_MAX_ATTEMPTS: Joi.number().integer().positive().default(5),
 });

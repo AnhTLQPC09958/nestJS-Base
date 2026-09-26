@@ -1,12 +1,14 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
+import { join } from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(ConfigService);
 
@@ -14,6 +16,14 @@ async function bootstrap() {
   // Parse cookie từ header "Cookie" -> req.cookie.<name>
   // Cần cho refresh token
   app.use(cookieParser());
+
+  // ===== Static files =====
+  // File vật lý: ./uploads/xxx.pdf
+  // URL serve:   http://localhost:3000/uploads/xxx.pdf
+  const uploadDest = configService.getOrThrow<string>('upload.dest');
+  app.useStaticAssets(join(process.cwd(), uploadDest), {
+    prefix: '/uploads/',
+  });
 
   // ===== CORS =====
   app.enableCors({
@@ -41,13 +51,13 @@ async function bootstrap() {
     }),
   );
 
-  // Global exception filter - format lỗi chuẩn
   app.useGlobalFilters(new HttpExceptionFilter());
 
   const port = configService.get<number>('app.port') ?? 3000;
 
   await app.listen(port);
   console.log(`***** App running *****: http://localhost:${port}`);
+  console.log(`📁 Uploads served at: /uploads/*`);
   console.log(
     `***** CORS allowed *****: ${configService.get<string[]>('cors.origins')?.join(', ')}`,
   );
