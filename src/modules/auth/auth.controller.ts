@@ -23,7 +23,12 @@ import {
   ResetPasswordDto,
 } from './dto/auth.dto';
 import { ErrorCode } from '../../common/constants';
-import { Public, CurrentUser, DeviceId } from '../../common/decorators';
+import {
+  Public,
+  CurrentUser,
+  DeviceId,
+  ThrottleAuth,
+} from '../../common/decorators';
 import { type AuthUser } from '../../common/types';
 import { CoreException } from '../../common/exceptions';
 
@@ -37,6 +42,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @ThrottleAuth()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -96,6 +102,7 @@ export class AuthController {
 
   // ===== FORGOT PASSWORD =====
   @Public()
+  @ThrottleAuth()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
@@ -107,6 +114,7 @@ export class AuthController {
 
   // ===== RESET PASSWORD =====
   @Public()
+  @ThrottleAuth()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() dto: ResetPasswordDto) {
@@ -115,6 +123,7 @@ export class AuthController {
   }
 
   // ===== CHANGE PASSWORD =====
+  @ThrottleAuth()
   @Patch('change-password')
   @HttpCode(HttpStatus.OK)
   async changePassword(

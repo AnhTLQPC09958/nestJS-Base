@@ -6,7 +6,6 @@ import { DatabaseModule } from './database';
 import { UsersModule } from './modules/users/users.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { RolesModule } from './modules/roles/roles.module';
-import { UserRolesModule } from './modules/user-roles/user-roles.module';
 import { RolePermissionsModule } from './modules/role-permissions/role-permissions.module';
 import { SeedModule } from './database/seeds';
 import { AuthModule } from './modules/auth/auth.module';
@@ -16,26 +15,41 @@ import { UploadModule } from './modules/upload/upload.module';
 import { MailModule } from './modules/mail/mail.module';
 import { OtpModule } from './modules/otp/otp.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { HealthModule } from './modules/health/heal.module';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ConfigService } from '@nestjs/config';
 @Module({
   imports: [
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            ttl: config.getOrThrow<number>('throttle.ttl'),
+            limit: config.getOrThrow<number>('throttle.limit'),
+          },
+        ],
+      }),
+    }),
     ScheduleModule.forRoot(),
     ConfigModule,
     DatabaseModule,
     PermissionsModule,
     RolesModule,
     UsersModule,
-    UserRolesModule,
     RolePermissionsModule,
     AuthModule,
     MailModule,
     UploadModule,
     MailModule,
     OtpModule,
+    HealthModule,
     // SeedModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
   ],

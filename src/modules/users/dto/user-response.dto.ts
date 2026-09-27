@@ -1,4 +1,5 @@
 import { User, UserStatus } from '../entities/user.entity';
+import { RoleOptionDto } from '../../roles/dto/role-response.dto';
 
 export class UserResponseDto {
   id!: number;
@@ -6,6 +7,8 @@ export class UserResponseDto {
   email!: string;
   avatarUrl?: string;
   status!: UserStatus;
+  roleId!: number | null;
+  role!: RoleOptionDto | null;
   createdBy!: number | null;
   updatedBy!: number | null;
   createdAt!: Date;
@@ -18,6 +21,8 @@ export class UserResponseDto {
       email: user.email,
       avatarUrl: user.avatarUrl,
       status: user.status,
+      roleId: user.roleId,
+      role: user.role ? RoleOptionDto.fromEntity(user.role) : null,
       createdBy: user.createdBy,
       updatedBy: user.updatedBy,
       createdAt: user.createdAt,

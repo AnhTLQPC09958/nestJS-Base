@@ -7,7 +7,6 @@ import { Permission } from '../../modules/permissions/entities/permission.entity
 import { Role } from '../../modules/roles/entities/role.entity';
 import { User } from '../../modules/users/entities/user.entity';
 import { RolePermission } from '../../modules/role-permissions/entities/role-permission.entity';
-import { UserRole } from '../../modules/user-roles/entities/user-role.entity';
 
 import { DEFAULT_PERMISSIONS } from './data/permissions.data';
 import { DEFAULT_ROLES, DEFAULT_ADMIN_USER } from './data/roles.data';
@@ -68,20 +67,12 @@ export class SeedService implements OnApplicationBootstrap {
 
       // ===== 4. User admin =====
       const hashedPassword = await bcrypt.hash(DEFAULT_ADMIN_USER.password, 10);
-      const adminUser = await manager.save(
+      await manager.save(
         User,
         manager.create(User, {
           username: DEFAULT_ADMIN_USER.username,
           email: DEFAULT_ADMIN_USER.email,
           password: hashedPassword,
-        }),
-      );
-
-      // ===== 5. Gán role admin cho user admin =====
-      await manager.save(
-        UserRole,
-        manager.create(UserRole, {
-          userId: adminUser.id,
           roleId: adminRole.id,
         }),
       );

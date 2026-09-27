@@ -6,11 +6,22 @@ import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(ConfigService);
+
+  // ===== Security Headers =====
+  app.use(
+    helmet({
+      // Tắt CSP cho dev — bật khi prod (cần config chi tiết theo FE)
+      contentSecurityPolicy: false,
+      // Cho phép cross-origin resource (FE gọi từ port khác)
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
 
   // ===== Cookie Parser =====
   // Parse cookie từ header "Cookie" -> req.cookie.<name>
@@ -30,7 +41,7 @@ async function bootstrap() {
     origin: configService.get<string[]>('cors.origins'),
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'device-id'],
   });
 
   // ===== Global ValidationPipe =====
@@ -52,6 +63,13 @@ async function bootstrap() {
   );
 
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  // ===== Trust Proxy (nếu chạy sau Nginx/Load balancer) =====
+  // Cần thiết để req.ip lấy đúng IP client thật
+  app.set('trust proxy', 1);
+
+  // ===== Disable x-powered-by =====
+  app.disable('x-powered-by');
 
   const port = configService.get<number>('app.port') ?? 3000;
 

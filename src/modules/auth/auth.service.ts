@@ -8,7 +8,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
 import { Repository } from 'typeorm';
-import { UserRole } from '../user-roles/entities/user-role.entity';
 import { RolePermission } from '../role-permissions/entities/role-permission.entity';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -40,8 +39,6 @@ export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-    @InjectRepository(UserRole)
-    private readonly userRoleRepo: Repository<UserRole>,
     @InjectRepository(RolePermission)
     private readonly rolePermissionRepo: Repository<RolePermission>,
     private readonly jwtService: JwtService,
@@ -124,7 +121,7 @@ export class AuthService {
       );
 
       const accessToken = await this.jwtService.signAsync(
-        { sub: payload.sub, username: payload.username },
+        { sub: payload.sub, username: payload.username, deviceId },
         {
           secret: accessSecret,
           expiresIn: accessExpiresIn,
@@ -256,24 +253,23 @@ export class AuthService {
       username: user.username,
       email: user.email,
       deviceId,
+      avatarUrl: user.avatarUrl,
       permissions,
     };
   }
 
   //   ===== gom permission theo module key =====
   private async getUserPermission(userId: number): Promise<PermissionsMap> {
-    const userRoles = await this.userRoleRepo.find({
-      where: { userId },
-      select: { roleId: true },
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: { id: true, roleId: true },
     });
-    if (userRoles.length === 0) return {};
-
-    const roleIds = userRoles.map((ur) => ur.roleId);
+    if (!user?.roleId) return {};
 
     const rolePerms = await this.rolePermissionRepo
       .createQueryBuilder('rp')
       .innerJoinAndSelect('rp.permission', 'p')
-      .where('rp.role_id IN (:...roleIds)', { roleIds })
+      .where('rp.role_id = :roleId', { roleId: user.roleId })
       .getMany();
 
     const map: PermissionsMap = {};

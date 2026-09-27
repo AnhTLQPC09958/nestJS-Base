@@ -44,4 +44,8 @@ export default () => ({
     expiresMinutes: parseInt(process.env.OTP_EXPIRES_MINUTES ?? '5', 10),
     maxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS ?? '5', 10),
   },
+  throttle: {
+    ttl: parseInt(process.env.THROTTLE_TTL ?? '60000', 10),
+    limit: parseInt(process.env.THROTTLE_LIMIT ?? '100', 10),
+  },
 });

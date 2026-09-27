@@ -1,8 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
-import { Repository } from 'typeorm';
-import { UserRole } from '../user-roles/entities/user-role.entity';
+import { In, Repository } from 'typeorm';
 import { FilterOperator, paginate, PaginateQuery } from 'nestjs-paginate';
 import { PaginatedResponse } from 'src/common/types';
 import {
@@ -21,8 +20,6 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-    @InjectRepository(UserRole)
-    private readonly userRoleRepo: Repository<UserRole>,
   ) {}
 
   async findAll(
@@ -42,11 +39,25 @@ export class UsersService {
       },
     });
 
-    return toPaginatedResponse(result, UserResponseDto.fromEntity);
+    const userIds = result.data.map((user) => user.id);
+    const usersWithRoles = userIds.length
+      ? await this.userRepo.find({
+          where: { id: In(userIds) },
+          relations: { role: true },
+        })
+      : [];
+    const usersById = new Map(usersWithRoles.map((user) => [user.id, user]));
+
+    return toPaginatedResponse(result, (user) =>
+      UserResponseDto.fromEntity(usersById.get(user.id) ?? user),
+    );
   }
 
   async findOne(id: number): Promise<UserResponseDto> {
-    const user = await this.userRepo.findOne({ where: { id } });
+    const user = await this.userRepo.findOne({
+      where: { id },
+      relations: { role: true },
+    });
     if (!user) {
       throw new NotFoundException(
         ErrorCode.USER_NOT_FOUND,
@@ -63,7 +74,7 @@ export class UsersService {
       select: { id: true, username: true, email: true },
     });
 
-    return users.map(UserOptionDto.fromEntity);
+    return users.map((user) => UserOptionDto.fromEntity(user));
   }
 
   async create(dto: CreateUserDto, actorId: number): Promise<UserResponseDto> {
@@ -80,28 +91,15 @@ export class UsersService {
           password: hashedPassword,
           avatarUrl: dto.avatarUrl,
           status: dto.status,
+          roleId: dto.roleId ?? null,
           createdBy: actorId,
           updatedBy: actorId,
         }),
       );
 
-      if (dto.roleIds && dto.roleIds.length > 0) {
-        await manager.save(
-          UserRole,
-          dto.roleIds.map((roleId) =>
-            manager.create(UserRole, {
-              userId: created.id,
-              roleId,
-              createdBy: actorId,
-              updatedBy: actorId,
-            }),
-          ),
-        );
-      }
-
       return created;
     });
-    return UserResponseDto.fromEntity(user);
+    return this.findOne(user.id);
   }
 
   async update(
@@ -137,32 +135,15 @@ export class UsersService {
         email: dto.email ?? user.email,
         avatarUrl: dto.avatarUrl ?? user.avatarUrl,
         status: dto.status ?? user.status,
+        roleId: dto.roleId === undefined ? user.roleId : dto.roleId,
         updatedBy: actorId,
       });
       const saved = await manager.save(user);
 
-      // Cập nhật roles (nếu client gửi roleIds)
-      if (dto.roleIds) {
-        await manager.delete(UserRole, { userId: id });
-        if (dto.roleIds.length > 0) {
-          await manager.save(
-            UserRole,
-            dto.roleIds.map((roleId) =>
-              manager.create(UserRole, {
-                userId: id,
-                roleId,
-                createdBy: actorId,
-                updatedBy: actorId,
-              }),
-            ),
-          );
-        }
-      }
-
       return saved;
     });
 
-    return UserResponseDto.fromEntity(updated);
+    return this.findOne(updated.id);
   }
 
   async remove(id: number): Promise<void> {

@@ -1,12 +1,11 @@
 import {
-  ArrayUnique,
-  IsArray,
   IsEmail,
   IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Min,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -38,10 +37,9 @@ export class CreateUserDto {
   status?: UserStatus;
 
   @IsOptional()
-  @IsArray()
-  @ArrayUnique()
-  @IsInt({ each: true })
-  roleIds?: number[];
+  @IsInt()
+  @Min(1)
+  roleId?: number | null;
 }
 
 export class UpdateUserDto extends PartialType(

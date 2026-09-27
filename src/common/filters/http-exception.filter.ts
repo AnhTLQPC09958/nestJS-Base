@@ -9,6 +9,7 @@ import {
 import { Request, Response } from 'express';
 import { ErrorCode } from '../constants/error-code.constant';
 import { MulterError } from 'multer';
+import { ThrottlerException } from '@nestjs/throttler';
 
 /**
  * Bắt mọi exception → format chuẩn:
@@ -58,6 +59,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     message: string | string[];
     error?: string;
   } {
+    if (exception instanceof ThrottlerException) {
+      return {
+        status: HttpStatus.TOO_MANY_REQUESTS,
+        code: ErrorCode.TOO_MANY_REQUESTS,
+        message: 'Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau.',
+      };
+    }
     // ===== MulterError (file upload) =====
     if (exception instanceof MulterError) {
       const codeMap: Record<string, { code: string; message: string }> = {

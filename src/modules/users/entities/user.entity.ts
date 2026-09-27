@@ -1,5 +1,6 @@
-import { Column, Entity } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../../../database/entities';
+import { Role } from '../../roles/entities/role.entity';
 
 export enum UserStatus {
   ACTIVE = 'active',
@@ -26,4 +27,11 @@ export class User extends BaseEntity {
 
   @Column({ type: 'enum', enum: UserStatus, default: UserStatus.ACTIVE })
   status!: UserStatus;
+
+  @Column({ name: 'role_id', type: 'int', nullable: true })
+  roleId!: number | null;
+
+  @ManyToOne(() => Role, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'role_id' })
+  role!: Role | null;
 }

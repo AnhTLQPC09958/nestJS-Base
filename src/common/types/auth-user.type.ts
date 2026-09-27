@@ -7,5 +7,6 @@ export interface AuthUser {
   username: string;
   email: string;
   deviceId: string;
+  avatarUrl?: string;
   permissions: PermissionsMap;
 }

@@ -7,14 +7,13 @@ import type { StringValue } from 'ms';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { User } from '../users/entities/user.entity';
-import { UserRole } from '../user-roles/entities/user-role.entity';
 import { RolePermission } from '../role-permissions/entities/role-permission.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { MailModule } from '../mail/mail.module';
 import { OtpModule } from '../otp/otp.module';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, UserRole, RolePermission]),
+    TypeOrmModule.forFeature([User, RolePermission]),
     MailModule,
     OtpModule,
     JwtModule.registerAsync({

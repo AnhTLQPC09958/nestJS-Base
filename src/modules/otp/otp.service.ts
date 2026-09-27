@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, LessThan, Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { createHash, randomInt } from 'crypto';
+import { createHash, randomInt, timingSafeEqual } from 'crypto';
 
 import { OtpToken, OtpPurpose } from './entities/otp-token.entity';
 import { BATCH_SIZE, OTP_CLEANUP_RETENTION_HOURS } from './types/otp.type';
@@ -63,41 +63,49 @@ export class OtpService {
     purpose: OtpPurpose,
     plainOtp: string,
   ): Promise<boolean> {
-    const otp = await this.otpRepo.findOne({
-      where: { userId, purpose },
-      order: { id: 'DESC' },
-    });
+    return this.otpRepo.manager.transaction(async (manager) => {
+      const otp = await manager
+        .createQueryBuilder(OtpToken, 'otp')
+        .setLock('pessimistic_write') // ← THÊM: SELECT ... FOR UPDATE
+        .where('otp.user_id = :userId', { userId })
+        .andWhere('otp.purpose = :purpose', { purpose })
+        .orderBy('otp.id', 'DESC')
+        .getOne();
 
-    if (!otp) return false;
-    if (otp.isUsed()) return false;
-    if (otp.isExpired()) return false;
+      // ... phần còn lại GIỮ NGUYÊN, chỉ đổi `this.otpRepo.save` → `manager.save`
+      if (!otp) return false;
+      if (otp.isUsed()) return false;
+      if (otp.isExpired()) return false;
 
-    if (otp.attemptCount >= this.maxAttempts) {
+      if (otp.attemptCount >= this.maxAttempts) {
+        otp.usedAt = new Date();
+        await manager.save(otp);
+        return false;
+      }
+
+      otp.attemptCount += 1;
+      const incomingHash = this.hash(plainOtp);
+      if (!this.safeCompare(incomingHash, otp.codeHash)) {
+        await manager.save(otp);
+        return false;
+      }
+
       otp.usedAt = new Date();
-      await this.otpRepo.save(otp);
-      return false;
-    }
+      await manager.save(otp);
+      return true;
+    });
+  }
 
-    // Tăng attempt
-    otp.attemptCount += 1;
-
-    const incomingHash = this.hash(plainOtp);
-    if (incomingHash !== otp.codeHash) {
-      await this.otpRepo.save(otp);
-      return false;
-    }
-
-    // Đúng → mark used
-    otp.usedAt = new Date();
-    await this.otpRepo.save(otp);
-    return true;
+  private safeCompare(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b));
   }
 
   /**
    * Cleanup OTP hết hạn — chạy mỗi giờ.
    * Xóa OTP đã hết hạn > 24h.
    */
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_WEEKDAY)
   async cleanupExpired(): Promise<void> {
     const cutoff = new Date(
       Date.now() - OTP_CLEANUP_RETENTION_HOURS * 60 * 60 * 1000,
