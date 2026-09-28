@@ -35,6 +35,7 @@ export class UsersService {
         username: [FilterOperator.ILIKE],
         email: [FilterOperator.ILIKE],
         status: [FilterOperator.EQ, FilterOperator.IN],
+        roleId: [FilterOperator.EQ],
         createdAt: [FilterOperator.GTE, FilterOperator.LTE, FilterOperator.BTW],
       },
     });

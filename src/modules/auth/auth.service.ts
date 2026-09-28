@@ -222,7 +222,10 @@ export class AuthService {
   }
 
   async getMe(userId: number) {
-    const user = await this.userRepo.findOne({ where: { id: userId } });
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      relations: { role: true },
+    });
     if (!user) {
       throw new UnauthorizedException(
         ErrorCode.UNAUTHORIZED,
@@ -231,7 +234,10 @@ export class AuthService {
     }
     const permissions = await this.getUserPermission(userId);
 
-    return { user, permissions };
+    return {
+      user,
+      permissions,
+    };
   }
 
   /**
@@ -239,7 +245,10 @@ export class AuthService {
    * Chỉ lấy field cần thiết — KHÔNG trả password.
    */
   async buildAuthUser(userId: number, deviceId: string): Promise<AuthUser> {
-    const user = await this.userRepo.findOne({ where: { id: userId } });
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      relations: { role: true },
+    });
     if (!user) {
       throw new UnauthorizedException(
         ErrorCode.UNAUTHORIZED,
@@ -254,6 +263,7 @@ export class AuthService {
       email: user.email,
       deviceId,
       avatarUrl: user.avatarUrl,
+      role: user.role?.name,
       permissions,
     };
   }
@@ -269,7 +279,7 @@ export class AuthService {
     const rolePerms = await this.rolePermissionRepo
       .createQueryBuilder('rp')
       .innerJoinAndSelect('rp.permission', 'p')
-      .where('rp.role_id = :roleId', { roleId: user.roleId })
+      .where('rp.roleId = :roleId', { roleId: user.roleId })
       .getMany();
 
     const map: PermissionsMap = {};

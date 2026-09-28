@@ -3,9 +3,9 @@ import { BaseEntity } from '../../../database/entities';
 import { Role } from '../../roles/entities/role.entity';
 
 export enum UserStatus {
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
-  BANNED = 'banned',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  BANNED = 'BANNED',
 }
 
 @Entity('users')

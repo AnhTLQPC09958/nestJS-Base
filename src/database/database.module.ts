@@ -24,7 +24,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
         // Chỉ phật synchronize ở dev
         // synchronize: config.get<string>('app.nodeEnv') === 'development',
-        synchronize: false,
+        synchronize: true,
 
         // Log query khi dev
         logging:

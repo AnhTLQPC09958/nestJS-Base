@@ -22,6 +22,11 @@ export class CreateUserDto {
   @MaxLength(255)
   email!: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  phone!: string;
+
   @IsString()
   @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự' })
   @MaxLength(100)

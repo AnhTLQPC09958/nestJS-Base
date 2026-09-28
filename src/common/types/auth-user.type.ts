@@ -9,4 +9,5 @@ export interface AuthUser {
   deviceId: string;
   avatarUrl?: string;
   permissions: PermissionsMap;
+  role?: string;
 }

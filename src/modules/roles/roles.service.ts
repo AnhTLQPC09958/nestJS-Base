@@ -67,14 +67,47 @@ export class RolesService {
   async create(dto: CreateRoleDto, actorId: number): Promise<RoleResponseDto> {
     await this.ensureUniqueName(dto.name);
 
-    const role = await this.roleRepo.save(
-      this.roleRepo.create({
-        name: dto.name,
-        description: dto.description,
-        createdBy: actorId,
-        updatedBy: actorId,
-      }),
-    );
+    const role = await this.roleRepo.manager.transaction(async (manager) => {
+      const created = await manager.save(
+        Role,
+        manager.create(Role, {
+          name: dto.name,
+          description: dto.description,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
+
+      if (dto.permissionIds?.length) {
+        const found = await manager.find(Permission, {
+          where: { id: In(dto.permissionIds) },
+          select: { id: true },
+        });
+        if (found.length !== dto.permissionIds.length) {
+          const foundIds = new Set(found.map((p) => p.id));
+          const missing = dto.permissionIds.filter((pid) => !foundIds.has(pid));
+          throw new CoreException(
+            ErrorCode.VALIDATION_FAILED,
+            `Permission không tồn tại: ${missing.join(', ')}`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        await manager.save(
+          RolePermission,
+          dto.permissionIds.map((permissionId) =>
+            manager.create(RolePermission, {
+              roleId: created.id,
+              permissionId,
+              createdBy: actorId,
+              updatedBy: actorId,
+            }),
+          ),
+        );
+      }
+
+      return created;
+    });
 
     return RoleResponseDto.fromEntity(role);
   }

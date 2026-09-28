@@ -6,6 +6,8 @@ import { join } from 'path';
 // Load .env
 loadEnv();
 
+const isSynchronizeEnabled = process.env.DB_SYNCHRONIZE === 'true';
+
 /**
  * DataSource cho TypeORM CLI (migration:generate, migration:run...).
  * CLI chạy ngoài NestJS context → không dùng được ConfigService.
@@ -26,7 +28,7 @@ export const AppDataSource = new DataSource({
   migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
 
   // KHÔNG bật synchronize ở CLI — migration phải là nguồn sự thật
-  synchronize: false,
+  synchronize: isSynchronizeEnabled,
   logging: ['query', 'error', 'warn'],
   timezone: '+07:00',
 });
