@@ -76,7 +76,7 @@ export class AuthController {
     if (!deviceId) {
       throw new CoreException(
         ErrorCode.VALIDATION_FAILED,
-        'Thiếu header X-Device-Id',
+        'Thiếu header device-id',
         HttpStatus.BAD_REQUEST,
       );
     }

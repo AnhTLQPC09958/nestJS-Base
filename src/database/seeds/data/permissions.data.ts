@@ -7,6 +7,7 @@ import { PermissionAction } from '../../../common/constants';
 export const DEFAULT_MODULES = ['nguoi-dung', 'vai-tro'] as const;
 
 export const DEFAULT_ACTIONS: PermissionAction[] = [
+  PermissionAction.SHOW_MENU,
   PermissionAction.INDEX,
   PermissionAction.SHOW,
   PermissionAction.CREATE,
