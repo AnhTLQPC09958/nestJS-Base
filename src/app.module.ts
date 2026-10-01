@@ -9,7 +9,7 @@ import { RolesModule } from './modules/roles/roles.module';
 import { RolePermissionsModule } from './modules/role-permissions/role-permissions.module';
 import { SeedModule } from './database/seeds';
 import { AuthModule } from './modules/auth/auth.module';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtAuthGuard, PermissionGuard } from './common/guards';
 import { UploadModule } from './modules/upload/upload.module';
 import { MailModule } from './modules/mail/mail.module';
@@ -18,6 +18,9 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from './modules/health/heal.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
+import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { AuditLogInterceptor } from './modules/audit-log/interceptors/audit-log.interceptor';
+import { UserDevicesModule } from './modules/user-devices/user-devices.module';
 @Module({
   imports: [
     ThrottlerModule.forRootAsync({
@@ -44,6 +47,8 @@ import { ConfigService } from '@nestjs/config';
     MailModule,
     OtpModule,
     HealthModule,
+    AuditLogModule,
+    UserDevicesModule,
     // SeedModule,
   ],
   controllers: [AppController],
@@ -52,6 +57,7 @@ import { ConfigService } from '@nestjs/config';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class AppModule {}

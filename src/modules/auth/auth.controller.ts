@@ -28,6 +28,8 @@ import {
   CurrentUser,
   DeviceId,
   ThrottleAuth,
+  ClientInfo,
+  type ClientInfo as ClientInfoType,
 } from '../../common/decorators';
 import { type AuthUser } from '../../common/types';
 import { CoreException } from '../../common/exceptions';
@@ -48,18 +50,19 @@ export class AuthController {
   async login(
     @Body() dto: LoginDto,
     @DeviceId() deviceId: string | undefined,
+    @ClientInfo() client: ClientInfoType,
     @Res({ passthrough: true }) res: Response,
   ) {
     if (!deviceId) {
       throw new CoreException(
         ErrorCode.VALIDATION_FAILED,
-        'Thiếu header X-Device-Id',
+        'Thiếu header device-id',
         HttpStatus.BAD_REQUEST,
       );
     }
 
     const { accessToken, refreshToken, permissions } =
-      await this.authService.login(dto, deviceId);
+      await this.authService.login(dto, deviceId, client);
 
     this.setRefreshCookie(res, refreshToken);
     return { accessToken, permissions };
@@ -71,6 +74,7 @@ export class AuthController {
   async refresh(
     @Req() req: Request,
     @DeviceId() deviceId: string | undefined,
+    @ClientInfo() client: ClientInfoType,
     @Res({ passthrough: true }) res: Response,
   ) {
     if (!deviceId) {
@@ -89,14 +93,26 @@ export class AuthController {
       );
     }
 
-    const { accessToken } = await this.authService.refresh(token, deviceId);
+    const { accessToken, refreshToken } = await this.authService.refresh(
+      token,
+      deviceId,
+      client,
+    );
+
+    // Rotate cookie — refresh token mới (jti mới)
+    this.setRefreshCookie(res, refreshToken);
+
     return { accessToken };
   }
 
-  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  logout(@Res({ passthrough: true }) res: Response): void {
+  async logout(
+    @CurrentUser('id') userId: number,
+    @DeviceId() deviceId: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    await this.authService.logout(userId, deviceId);
     res.clearCookie(REFRESH_COOKIE, { path: '/' });
   }
 
@@ -105,8 +121,11 @@ export class AuthController {
   @ThrottleAuth()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    await this.authService.forgotPassword(dto);
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+    @ClientInfo() client: ClientInfoType,
+  ) {
+    await this.authService.forgotPassword(dto, client);
     return {
       message: 'Nếu email tồn tại, mã OTP đã được gửi đến hộp thư của bạn',
     };
@@ -117,8 +136,11 @@ export class AuthController {
   @ThrottleAuth()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  async resetPassword(@Body() dto: ResetPasswordDto) {
-    await this.authService.resetPassword(dto);
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @ClientInfo() client: ClientInfoType,
+  ) {
+    await this.authService.resetPassword(dto, client);
     return { message: 'Đặt lại mật khẩu thành công' };
   }
 
@@ -129,8 +151,9 @@ export class AuthController {
   async changePassword(
     @CurrentUser('id') userId: number,
     @Body() dto: ChangePasswordDto,
+    @ClientInfo() client: ClientInfoType,
   ) {
-    await this.authService.changePassword(userId, dto);
+    await this.authService.changePassword(userId, dto, client);
     return { message: 'Đổi mật khẩu thành công' };
   }
 

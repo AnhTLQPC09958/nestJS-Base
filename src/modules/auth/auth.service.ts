@@ -25,11 +25,21 @@ import { MailService } from '../mail/mail.service';
 import { OtpService } from '../otp/otp.service';
 import { OtpPurpose } from '../otp/entities/otp-token.entity';
 import { CoreException } from 'src/common/exceptions';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { LoginAction } from '../audit-log/entities/login-log.entity';
+import type { ClientInfo } from '../../common/decorators/client-info.decorator';
+import { randomUUID } from 'crypto';
+import { UserDevicesService } from '../user-devices/user-devices.service';
 
 export interface LoginResult {
   accessToken: string;
   refreshToken: string;
   permissions: PermissionsMap;
+}
+
+export interface RefreshResult {
+  accessToken: string;
+  refreshToken: string;
 }
 
 @Injectable()
@@ -45,10 +55,16 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly mailService: MailService,
     private readonly otpService: OtpService,
+    private readonly auditLogService: AuditLogService,
+    private readonly userDevicesService: UserDevicesService,
   ) {}
 
-  //   ===== LOGIN =====
-  async login(dto: LoginDto, deviceId: string): Promise<LoginResult> {
+  // ===== LOGIN =====
+  async login(
+    dto: LoginDto,
+    deviceId: string,
+    client: ClientInfo,
+  ): Promise<LoginResult> {
     const user = await this.userRepo
       .createQueryBuilder('u')
       .addSelect('u.password')
@@ -56,6 +72,16 @@ export class AuthService {
       .getOne();
 
     if (!user) {
+      void this.auditLogService.recordLogin({
+        userId: null,
+        username: dto.username,
+        action: LoginAction.LOGIN,
+        success: false,
+        failReason: 'Tài khoản không tồn tại',
+        ipAddress: client.ip,
+        userAgent: client.userAgent,
+        deviceId: client.deviceId,
+      });
       throw new UnauthorizedException(
         ErrorCode.AUTH_INVALID_CREDENTIALS,
         'Sai tên đăng nhập hoặc mật khẩu',
@@ -64,6 +90,16 @@ export class AuthService {
 
     const isMatch = await bcrypt.compare(dto.password, user.password);
     if (!isMatch) {
+      void this.auditLogService.recordLogin({
+        userId: user.id,
+        username: user.username,
+        action: LoginAction.LOGIN,
+        success: false,
+        failReason: 'Sai mật khẩu',
+        ipAddress: client.ip,
+        userAgent: client.userAgent,
+        deviceId: client.deviceId,
+      });
       throw new UnauthorizedException(
         ErrorCode.AUTH_INVALID_CREDENTIALS,
         'Sai tên đăng nhập hoặc mật khẩu',
@@ -71,7 +107,12 @@ export class AuthService {
     }
 
     // ===== Sinh token =====
-    const payload = { sub: user.id, username: user.username, deviceId };
+    // Access token: không có jti (chỉ verify signature)
+    // Refresh token: có jti (để check active session khi refresh)
+    const jti = randomUUID();
+    const accessPayload = { sub: user.id, username: user.username, deviceId };
+    const refreshPayload = { ...accessPayload, jti };
+
     const accessSecret = this.config.getOrThrow<string>('jwt.accessSecret');
     const refreshSecret = this.config.getOrThrow<string>('jwt.refreshSecret');
     const accessExpiresIn = this.config.getOrThrow<StringValue>(
@@ -81,11 +122,11 @@ export class AuthService {
       'jwt.refreshExpiresIn',
     );
 
-    const accessToken = await this.jwtService.signAsync(payload, {
+    const accessToken = await this.jwtService.signAsync(accessPayload, {
       secret: accessSecret,
       expiresIn: accessExpiresIn,
     });
-    const refreshToken = await this.jwtService.signAsync(payload, {
+    const refreshToken = await this.jwtService.signAsync(refreshPayload, {
       secret: refreshSecret,
       expiresIn: refreshExpiresIn,
     });
@@ -93,42 +134,128 @@ export class AuthService {
     // Gom permission của user
     const permissions = await this.getUserPermission(user.id);
 
+    // Upsert session (jti mới, đảm bảo mỗi device chỉ có 1 row active)
+    await this.userDevicesService.upsertSession({
+      userId: user.id,
+      deviceId,
+      jti,
+      userAgent: client.userAgent,
+      ipAddress: client.ip,
+    });
+
+    // Ghi login log thành công
+    void this.auditLogService.recordLogin({
+      userId: user.id,
+      username: user.username,
+      action: LoginAction.LOGIN,
+      success: true,
+      ipAddress: client.ip,
+      userAgent: client.userAgent,
+      deviceId: client.deviceId,
+    });
+
     return { accessToken, refreshToken, permissions };
   }
 
+  // ===== REFRESH =====
   async refresh(
     refreshToken: string,
     deviceId: string,
-  ): Promise<{ accessToken: string }> {
+    client: ClientInfo,
+  ): Promise<RefreshResult> {
     try {
       const payload = await this.jwtService.verifyAsync<{
         sub: number;
         username: string;
         deviceId: string;
+        jti: string;
       }>(refreshToken, {
         secret: this.config.getOrThrow<string>('jwt.refreshSecret'),
       });
 
       if (payload.deviceId !== deviceId) {
+        void this.auditLogService.recordLogin({
+          userId: payload.sub,
+          username: payload.username,
+          action: LoginAction.REFRESH,
+          success: false,
+          failReason: 'Device ID không khớp',
+          ipAddress: client.ip,
+          userAgent: client.userAgent,
+          deviceId: client.deviceId,
+        });
         throw new UnauthorizedException(
           ErrorCode.AUTH_TOKEN_INVALID,
           'Device ID không khớp với refresh token',
         );
       }
+
+      // Check session còn active không
+      const session = await this.userDevicesService.findActiveByJti(
+        payload.sub,
+        deviceId,
+        payload.jti,
+      );
+      if (!session) {
+        void this.auditLogService.recordLogin({
+          userId: payload.sub,
+          username: payload.username,
+          action: LoginAction.REFRESH,
+          success: false,
+          failReason: 'Phiên đăng nhập đã bị thu hồi',
+          ipAddress: client.ip,
+          userAgent: client.userAgent,
+          deviceId: client.deviceId,
+        });
+        throw new UnauthorizedException(
+          ErrorCode.AUTH_TOKEN_INVALID,
+          'Phiên đăng nhập đã bị thu hồi',
+        );
+      }
+
+      // Rotate jti mới
+      const newJti = randomUUID();
+      await this.userDevicesService.rotateSession(
+        payload.sub,
+        deviceId,
+        newJti,
+      );
+
       const accessSecret = this.config.getOrThrow<string>('jwt.accessSecret');
+      const refreshSecret = this.config.getOrThrow<string>('jwt.refreshSecret');
       const accessExpiresIn = this.config.getOrThrow<StringValue>(
         'jwt.accessExpiresIn',
+      );
+      const refreshExpiresIn = this.config.getOrThrow<StringValue>(
+        'jwt.refreshExpiresIn',
       );
 
       const accessToken = await this.jwtService.signAsync(
         { sub: payload.sub, username: payload.username, deviceId },
-        {
-          secret: accessSecret,
-          expiresIn: accessExpiresIn,
-        },
+        { secret: accessSecret, expiresIn: accessExpiresIn },
       );
 
-      return { accessToken };
+      const newRefreshToken = await this.jwtService.signAsync(
+        {
+          sub: payload.sub,
+          username: payload.username,
+          deviceId,
+          jti: newJti,
+        },
+        { secret: refreshSecret, expiresIn: refreshExpiresIn },
+      );
+
+      void this.auditLogService.recordLogin({
+        userId: payload.sub,
+        username: payload.username,
+        action: LoginAction.REFRESH,
+        success: true,
+        ipAddress: client.ip,
+        userAgent: client.userAgent,
+        deviceId: client.deviceId,
+      });
+
+      return { accessToken, refreshToken: newRefreshToken };
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException(
@@ -138,11 +265,37 @@ export class AuthService {
     }
   }
 
-  async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
+  // ===== LOGOUT =====
+  async logout(userId: number, deviceId: string): Promise<void> {
+    await this.userDevicesService.revokeByDevice(userId, deviceId);
+
+    void this.auditLogService.recordLogin({
+      userId,
+      username: null,
+      action: LoginAction.LOGOUT,
+      success: true,
+      deviceId,
+    });
+  }
+
+  // ===== FORGOT PASSWORD =====
+  async forgotPassword(
+    dto: ForgotPasswordDto,
+    client: ClientInfo,
+  ): Promise<void> {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
 
-    // ⚠️ Không leak email existence — silent return nếu không tìm thấy
     if (!user) {
+      void this.auditLogService.recordLogin({
+        userId: null,
+        username: null,
+        action: LoginAction.FORGOT_PASSWORD,
+        success: false,
+        failReason: 'Email không tồn tại',
+        ipAddress: client.ip,
+        userAgent: client.userAgent,
+        deviceId: client.deviceId,
+      });
       this.logger.warn(`Forgot password cho email không tồn tại: ${dto.email}`);
       return;
     }
@@ -153,13 +306,25 @@ export class AuthService {
     );
 
     await this.mailService.sendOtpEmail(user.email, otp, user.username);
+
+    void this.auditLogService.recordLogin({
+      userId: user.id,
+      username: user.username,
+      action: LoginAction.FORGOT_PASSWORD,
+      success: true,
+      ipAddress: client.ip,
+      userAgent: client.userAgent,
+      deviceId: client.deviceId,
+    });
   }
 
   // ===== RESET PASSWORD =====
-  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+  async resetPassword(
+    dto: ResetPasswordDto,
+    client: ClientInfo,
+  ): Promise<void> {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
 
-    // Trả lỗi generic — không tiết lộ email có tồn tại
     if (!user) {
       throw new CoreException(
         ErrorCode.AUTH_OTP_INVALID,
@@ -175,6 +340,16 @@ export class AuthService {
     );
 
     if (!isValid) {
+      void this.auditLogService.recordLogin({
+        userId: user.id,
+        username: user.username,
+        action: LoginAction.RESET_PASSWORD,
+        success: false,
+        failReason: 'OTP không hợp lệ',
+        ipAddress: client.ip,
+        userAgent: client.userAgent,
+        deviceId: client.deviceId,
+      });
       throw new CoreException(
         ErrorCode.AUTH_OTP_INVALID,
         'OTP không hợp lệ hoặc đã hết hạn',
@@ -185,11 +360,23 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
     await this.userRepo.update({ id: user.id }, { password: hashedPassword });
 
-    this.logger.log(`🔑 Password reset thành công cho user ${user.id}`);
+    void this.auditLogService.recordLogin({
+      userId: user.id,
+      username: user.username,
+      action: LoginAction.RESET_PASSWORD,
+      success: true,
+      ipAddress: client.ip,
+      userAgent: client.userAgent,
+      deviceId: client.deviceId,
+    });
   }
 
   // ===== CHANGE PASSWORD =====
-  async changePassword(userId: number, dto: ChangePasswordDto): Promise<void> {
+  async changePassword(
+    userId: number,
+    dto: ChangePasswordDto,
+    client: ClientInfo,
+  ): Promise<void> {
     const user = await this.userRepo
       .createQueryBuilder('u')
       .addSelect('u.password')
@@ -205,6 +392,16 @@ export class AuthService {
 
     const isOldMatch = await bcrypt.compare(dto.oldPassword, user.password);
     if (!isOldMatch) {
+      void this.auditLogService.recordLogin({
+        userId: user.id,
+        username: user.username,
+        action: LoginAction.CHANGE_PASSWORD,
+        success: false,
+        failReason: 'Mật khẩu cũ không đúng',
+        ipAddress: client.ip,
+        userAgent: client.userAgent,
+        deviceId: client.deviceId,
+      });
       throw new CoreException(
         ErrorCode.AUTH_OLD_PASSWORD_INCORRECT,
         'Mật khẩu cũ không đúng',
@@ -218,7 +415,15 @@ export class AuthService {
       { password: hashedPassword, updatedBy: userId },
     );
 
-    this.logger.log(`🔑 User ${userId} đổi mật khẩu thành công`);
+    void this.auditLogService.recordLogin({
+      userId: user.id,
+      username: user.username,
+      action: LoginAction.CHANGE_PASSWORD,
+      success: true,
+      ipAddress: client.ip,
+      userAgent: client.userAgent,
+      deviceId: client.deviceId,
+    });
   }
 
   async getMe(userId: number) {
@@ -240,10 +445,6 @@ export class AuthService {
     };
   }
 
-  /**
-   * Build AuthUser cho JwtStrategy.
-   * Chỉ lấy field cần thiết — KHÔNG trả password.
-   */
   async buildAuthUser(userId: number, deviceId: string): Promise<AuthUser> {
     const user = await this.userRepo.findOne({
       where: { id: userId },
@@ -268,7 +469,6 @@ export class AuthService {
     };
   }
 
-  //   ===== gom permission theo module key =====
   private async getUserPermission(userId: number): Promise<PermissionsMap> {
     const user = await this.userRepo.findOne({
       where: { id: userId },

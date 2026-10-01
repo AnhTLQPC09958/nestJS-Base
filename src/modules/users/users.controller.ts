@@ -16,6 +16,7 @@ import { PermissionAction } from '../../common/constants/permission.constant';
 import { Paginate } from 'nestjs-paginate';
 import type { PaginateQuery } from 'nestjs-paginate';
 import { CreateUserDto, UpdateUserDto } from './dto';
+import { AuditLog } from '../audit-log/decorators/audit-log.decorator';
 
 @Controller('nguoi-dung')
 export class UsersController {
@@ -43,6 +44,11 @@ export class UsersController {
   // ============ CREATE ============
   @Post()
   @CheckPermission('nguoi-dung', PermissionAction.CREATE)
+  @AuditLog({
+    action: 'create',
+    module: 'nguoi-dung',
+    description: 'Tạo mới người dùng',
+  })
   create(@Body() dto: CreateUserDto, @CurrentUser('id') actorId: number) {
     return this.usersService.create(dto, actorId);
   }
@@ -50,6 +56,11 @@ export class UsersController {
   // ============ UPDATE ============
   @Patch(':id')
   @CheckPermission('nguoi-dung', PermissionAction.EDIT)
+  @AuditLog({
+    action: 'update',
+    module: 'nguoi-dung',
+    description: 'Cập nhật người dùng',
+  })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateUserDto,
@@ -62,6 +73,11 @@ export class UsersController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @CheckPermission('nguoi-dung', PermissionAction.DELETE)
+  @AuditLog({
+    action: 'delete',
+    module: 'nguoi-dung',
+    description: 'Xoá người dùng',
+  })
   async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.usersService.remove(id);
   }

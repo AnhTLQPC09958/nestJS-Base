@@ -4,7 +4,12 @@ import { PermissionAction } from '../../../common/constants';
  * Danh sách permission mặc định cho core.
  * Khi thêm module mới → bổ sung vào đây.
  */
-export const DEFAULT_MODULES = ['nguoi-dung', 'vai-tro'] as const;
+export const DEFAULT_MODULES = [
+  'nguoi-dung',
+  'vai-tro',
+  'nhat-ky',
+  'thiet-bi',
+] as const;
 
 export const DEFAULT_ACTIONS: PermissionAction[] = [
   PermissionAction.SHOW_MENU,

@@ -27,10 +27,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         synchronize: true,
 
         // Log query khi dev
-        logging:
-          config.get<string>('app.nodeEnv') === 'development'
-            ? ['query', 'error', 'warn']
-            : ['error'],
+        // logging:
+        //   config.get<string>('app.nodeEnv') === 'development'
+        //     ? ['query', 'error', 'warn']
+        //     : ['error'],
 
         timezone: '+07:00',
       }),
