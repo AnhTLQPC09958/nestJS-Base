@@ -6,11 +6,13 @@ import { AuthService } from '../auth.service';
 import { AuthUser } from 'src/common/types';
 import { ErrorCode } from 'src/common/constants';
 import { Request } from 'express';
+import { RevokedTokensService } from 'src/modules/revoked-tokens/revoked-tokens.service';
 
 interface JwtPayload {
   sub: number;
   username: string;
   deviceId: string;
+  jti: string;
 }
 
 @Injectable()
@@ -18,6 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     config: ConfigService,
     private readonly authService: AuthService,
+    private readonly revokedTokensService: RevokedTokensService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -39,8 +42,18 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!headerDeviceId) {
       throw new UnauthorizedException(
         ErrorCode.AUTH_TOKEN_INVALID,
-        'Thiếu header X-Device-Id',
+        'Thiếu header device-id',
       );
+    }
+
+    if (payload.jti) {
+      const revoked = await this.revokedTokensService.isRevoked(payload.jti);
+      if (revoked) {
+        throw new UnauthorizedException(
+          ErrorCode.AUTH_TOKEN_INVALID,
+          'Phiên đăng nhập đã bị thu hồi',
+        );
+      }
     }
 
     // Verify device khớp token

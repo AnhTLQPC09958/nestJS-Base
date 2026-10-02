@@ -30,6 +30,7 @@ import { LoginAction } from '../audit-log/entities/login-log.entity';
 import type { ClientInfo } from '../../common/decorators/client-info.decorator';
 import { randomUUID } from 'crypto';
 import { UserDevicesService } from '../user-devices/user-devices.service';
+import { RevokedTokensService } from '../revoked-tokens/revoked-tokens.service';
 
 export interface LoginResult {
   accessToken: string;
@@ -57,6 +58,7 @@ export class AuthService {
     private readonly otpService: OtpService,
     private readonly auditLogService: AuditLogService,
     private readonly userDevicesService: UserDevicesService,
+    private readonly revokedTokensService: RevokedTokensService,
   ) {}
 
   // ===== LOGIN =====
@@ -110,8 +112,13 @@ export class AuthService {
     // Access token: không có jti (chỉ verify signature)
     // Refresh token: có jti (để check active session khi refresh)
     const jti = randomUUID();
-    const accessPayload = { sub: user.id, username: user.username, deviceId };
-    const refreshPayload = { ...accessPayload, jti };
+    const accessPayload = {
+      sub: user.id,
+      username: user.username,
+      deviceId,
+      jti,
+    };
+    const refreshPayload = { ...accessPayload };
 
     const accessSecret = this.config.getOrThrow<string>('jwt.accessSecret');
     const refreshSecret = this.config.getOrThrow<string>('jwt.refreshSecret');
@@ -213,13 +220,7 @@ export class AuthService {
         );
       }
 
-      // Rotate jti mới
-      const newJti = randomUUID();
-      await this.userDevicesService.rotateSession(
-        payload.sub,
-        deviceId,
-        newJti,
-      );
+      await this.userDevicesService.touchSession(payload.sub, deviceId);
 
       const accessSecret = this.config.getOrThrow<string>('jwt.accessSecret');
       const refreshSecret = this.config.getOrThrow<string>('jwt.refreshSecret');
@@ -230,8 +231,13 @@ export class AuthService {
         'jwt.refreshExpiresIn',
       );
 
-      const accessToken = await this.jwtService.signAsync(
-        { sub: payload.sub, username: payload.username, deviceId },
+      const newAccessToken = await this.jwtService.signAsync(
+        {
+          sub: payload.sub,
+          username: payload.username,
+          deviceId,
+          jti: payload.jti,
+        },
         { secret: accessSecret, expiresIn: accessExpiresIn },
       );
 
@@ -240,7 +246,7 @@ export class AuthService {
           sub: payload.sub,
           username: payload.username,
           deviceId,
-          jti: newJti,
+          jti: payload.jti,
         },
         { secret: refreshSecret, expiresIn: refreshExpiresIn },
       );
@@ -255,7 +261,7 @@ export class AuthService {
         deviceId: client.deviceId,
       });
 
-      return { accessToken, refreshToken: newRefreshToken };
+      return { accessToken: newAccessToken, refreshToken: newRefreshToken };
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException(
@@ -267,8 +273,24 @@ export class AuthService {
 
   // ===== LOGOUT =====
   async logout(userId: number, deviceId: string): Promise<void> {
-    await this.userDevicesService.revokeByDevice(userId, deviceId);
+    // 1. Update user_devices is_active=0
+    const device = await this.userDevicesService.revokeByDevice(
+      userId,
+      deviceId,
+      'logout',
+    );
 
+    // 2. Revoke jti → blacklist access token hiện tại
+    if (device?.jti) {
+      await this.revokedTokensService.revoke({
+        jti: device.jti,
+        userId,
+        deviceId,
+        reason: 'logout',
+      });
+    }
+
+    // 3. Audit log
     void this.auditLogService.recordLogin({
       userId,
       username: null,

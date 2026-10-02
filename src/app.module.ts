@@ -21,6 +21,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { AuditLogInterceptor } from './modules/audit-log/interceptors/audit-log.interceptor';
 import { UserDevicesModule } from './modules/user-devices/user-devices.module';
+import { RevokedTokensModule } from './modules/revoked-tokens/revoked-tokens.module';
 @Module({
   imports: [
     ThrottlerModule.forRootAsync({
@@ -49,7 +50,8 @@ import { UserDevicesModule } from './modules/user-devices/user-devices.module';
     HealthModule,
     AuditLogModule,
     UserDevicesModule,
-    // SeedModule,
+    SeedModule,
+    RevokedTokensModule,
   ],
   controllers: [AppController],
   providers: [

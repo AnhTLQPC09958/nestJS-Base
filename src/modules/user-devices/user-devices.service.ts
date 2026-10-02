@@ -16,12 +16,12 @@ export interface UpsertSessionParams {
   ipAddress: string | null;
 }
 
-const REVOKE_REASON = {
-  LOGOUT: 'logout',
-  FORCE_LOGOUT: 'force_logout',
-  ADMIN_REVOKE: 'admin_revoke',
-  EXPIRED: 'expired',
-} as const;
+// const REVOKE_REASON = {
+//   LOGOUT: 'logout',
+//   FORCE_LOGOUT: 'force_logout',
+//   ADMIN_REVOKE: 'admin_revoke',
+//   EXPIRED: 'expired',
+// } as const;
 
 @Injectable()
 export class UserDevicesService {
@@ -125,52 +125,73 @@ export class UserDevicesService {
   async revokeByDevice(
     userId: number,
     deviceId: string,
-    reason: string = REVOKE_REASON.LOGOUT,
-  ): Promise<void> {
+    reason = 'logout',
+  ): Promise<UserDevice | null> {
+    const row = await this.repo.findOne({
+      where: { userId, deviceId, isActive: true },
+    });
+    if (!row) return null;
+
     await this.repo.update(
-      { userId, deviceId, isActive: true },
-      {
-        isActive: false,
-        revokedAt: new Date(),
-        revokedReason: reason,
-      },
+      { id: row.id },
+      { isActive: false, revokedAt: new Date(), revokedReason: reason },
     );
+
+    return row;
   }
 
   /** Admin/user revoke device theo id (kiểm tra ownership) */
   async revokeById(
     id: number,
     userId: number,
-    reason: string = REVOKE_REASON.ADMIN_REVOKE,
-  ): Promise<boolean> {
-    const row = await this.repo.findOne({ where: { id, userId } });
-    if (!row) return false;
+    reason = 'admin_revoke',
+  ): Promise<UserDevice | null> {
+    const row = await this.repo.findOne({
+      where: { id, userId, isActive: true },
+    });
+    if (!row) return null;
+
     await this.repo.update(
       { id },
       { isActive: false, revokedAt: new Date(), revokedReason: reason },
     );
-    return true;
+
+    return row;
   }
 
   /** Revoke tất cả device khác current */
   async revokeAllExcept(
     userId: number,
     exceptDeviceId: string,
-    reason: string = REVOKE_REASON.FORCE_LOGOUT,
-  ): Promise<number> {
-    const result = await this.repo
-      .createQueryBuilder()
-      .update(UserDevice)
-      .set({
-        isActive: false,
-        revokedAt: new Date(),
-        revokedReason: reason,
-      })
-      .where('user_id = :userId', { userId })
-      .andWhere('device_id != :exceptDeviceId', { exceptDeviceId })
-      .andWhere('is_active = 1')
-      .execute();
-    return result.affected ?? 0;
+    reason = 'force_logout',
+  ): Promise<UserDevice[]> {
+    const rows = await this.repo.find({
+      where: { userId, isActive: true },
+    });
+    const toRevoke = rows.filter((r) => r.deviceId !== exceptDeviceId);
+    if (toRevoke.length === 0) return [];
+
+    const ids = toRevoke.map((r) => r.id);
+    await this.repo.update(ids, {
+      isActive: false,
+      revokedAt: new Date(),
+      revokedReason: reason,
+    });
+
+    return toRevoke;
+  }
+
+  /** Refresh: update lastActiveAt + expiresAt, KHÔNG đổi jti */
+  async touchSession(userId: number, deviceId: string): Promise<void> {
+    const refreshExpiresIn = this.config.getOrThrow<StringValue>(
+      'jwt.refreshExpiresIn',
+    );
+    const expiresAt = new Date(Date.now() + ms(refreshExpiresIn));
+
+    await this.repo.update(
+      { userId, deviceId, isActive: true },
+      { lastActiveAt: new Date(), expiresAt },
+    );
   }
 
   /**
