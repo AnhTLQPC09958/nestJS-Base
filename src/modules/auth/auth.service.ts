@@ -305,7 +305,9 @@ export class AuthService {
     dto: ForgotPasswordDto,
     client: ClientInfo,
   ): Promise<void> {
-    const user = await this.userRepo.findOne({ where: { email: dto.email } });
+    const user = await this.userRepo.findOne({
+      where: { email: dto.email, username: dto.username },
+    });
 
     if (!user) {
       void this.auditLogService.recordLogin({
@@ -313,7 +315,7 @@ export class AuthService {
         username: null,
         action: LoginAction.FORGOT_PASSWORD,
         success: false,
-        failReason: 'Email không tồn tại',
+        failReason: `Không tìm thấy người dùng với email "${dto.email}" và tên đăng nhập "${dto.username}"`,
         ipAddress: client.ip,
         userAgent: client.userAgent,
         deviceId: client.deviceId,
