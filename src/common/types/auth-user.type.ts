@@ -10,4 +10,5 @@ export interface AuthUser {
   avatarUrl?: string;
   permissions: PermissionsMap;
   role?: string;
+  firstLogin: boolean;
 }

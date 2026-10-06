@@ -18,6 +18,7 @@ import type { StringValue } from 'ms';
 import { AuthService } from './auth.service';
 import {
   ChangePasswordDto,
+  FirstChangePasswordDto,
   ForgotPasswordDto,
   LoginDto,
   ResetPasswordDto,
@@ -142,6 +143,17 @@ export class AuthController {
   ) {
     await this.authService.resetPassword(dto, client);
     return { message: 'Đặt lại mật khẩu thành công' };
+  }
+
+  @Patch('first-change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ThrottleAuth()
+  async firstChangePassword(
+    @CurrentUser('id') userId: number,
+    @Body() dto: FirstChangePasswordDto,
+    @ClientInfo() client: ClientInfoType,
+  ) {
+    await this.authService.firstChangePassword(userId, dto, client);
   }
 
   // ===== CHANGE PASSWORD =====

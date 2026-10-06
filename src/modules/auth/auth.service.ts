@@ -6,12 +6,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { User } from '../users/entities/user.entity';
+import { User, UserStatus } from '../users/entities/user.entity';
 import { Repository } from 'typeorm';
 import { RolePermission } from '../role-permissions/entities/role-permission.entity';
 import { ConfigService } from '@nestjs/config';
 import {
   ChangePasswordDto,
+  FirstChangePasswordDto,
   ForgotPasswordDto,
   LoginDto,
   ResetPasswordDto,
@@ -24,12 +25,15 @@ import { AuthUser, PermissionsMap } from 'src/common/types';
 import { MailService } from '../mail/mail.service';
 import { OtpService } from '../otp/otp.service';
 import { OtpPurpose } from '../otp/entities/otp-token.entity';
-import { CoreException } from 'src/common/exceptions';
+import { CoreException, ForbiddenException } from 'src/common/exceptions';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { LoginAction } from '../audit-log/entities/login-log.entity';
 import type { ClientInfo } from '../../common/decorators/client-info.decorator';
 import { randomUUID } from 'crypto';
-import { UserDevicesService } from '../user-devices/user-devices.service';
+import {
+  RevokedReason,
+  UserDevicesService,
+} from '../user-devices/user-devices.service';
 import { RevokedTokensService } from '../revoked-tokens/revoked-tokens.service';
 
 export interface LoginResult {
@@ -105,6 +109,40 @@ export class AuthService {
       throw new UnauthorizedException(
         ErrorCode.AUTH_INVALID_CREDENTIALS,
         'Sai tên đăng nhập hoặc mật khẩu',
+      );
+    }
+
+    if (user.status === UserStatus.BANNED) {
+      void this.auditLogService.recordLogin({
+        userId: user.id,
+        username: user.username,
+        action: LoginAction.LOGIN,
+        success: false,
+        failReason: 'Tài khoản đã bị khoá',
+        ipAddress: client.ip,
+        userAgent: client.userAgent,
+        deviceId: client.deviceId,
+      });
+      throw new ForbiddenException(
+        ErrorCode.AUTH_ACCOUNT_BANNED,
+        'Tài khoản đã bị khoá',
+      );
+    }
+
+    if (user.status === UserStatus.INACTIVE) {
+      void this.auditLogService.recordLogin({
+        userId: user.id,
+        username: user.username,
+        action: LoginAction.LOGIN,
+        success: false,
+        failReason: 'Tài khoản chưa kích hoạt',
+        ipAddress: client.ip,
+        userAgent: client.userAgent,
+        deviceId: client.deviceId,
+      });
+      throw new ForbiddenException(
+        ErrorCode.AUTH_ACCOUNT_INACTIVE,
+        'Tài khoản chưa kích hoạt',
       );
     }
 
@@ -277,7 +315,7 @@ export class AuthService {
     const device = await this.userDevicesService.revokeByDevice(
       userId,
       deviceId,
-      'logout',
+      RevokedReason.LOGOUT,
     );
 
     // 2. Revoke jti → blacklist access token hiện tại
@@ -315,7 +353,7 @@ export class AuthService {
         username: null,
         action: LoginAction.FORGOT_PASSWORD,
         success: false,
-        failReason: `Không tìm thấy người dùng với email "${dto.email}" và tên đăng nhập "${dto.username}"`,
+        failReason: `Không tìm thấy người dùng`,
         ipAddress: client.ip,
         userAgent: client.userAgent,
         deviceId: client.deviceId,
@@ -362,7 +400,6 @@ export class AuthService {
       OtpPurpose.FORGOT_PASSWORD,
       dto.otp,
     );
-
     if (!isValid) {
       void this.auditLogService.recordLogin({
         userId: user.id,
@@ -382,7 +419,15 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
-    await this.userRepo.update({ id: user.id }, { password: hashedPassword });
+    await this.userRepo.update(
+      { id: user.id },
+      {
+        password: hashedPassword,
+        firstLogin: false,
+        passwordChangedAt: new Date(),
+        updatedBy: user.id,
+      },
+    );
 
     void this.auditLogService.recordLogin({
       userId: user.id,
@@ -393,6 +438,53 @@ export class AuthService {
       userAgent: client.userAgent,
       deviceId: client.deviceId,
     });
+    await this.userDevicesService.revokeAllByUser(user.id, 'passwordReset');
+  }
+
+  // ===== FIRST CHANGE PASSWORD =====
+  async firstChangePassword(
+    userId: number,
+    dto: FirstChangePasswordDto,
+    client: ClientInfo,
+  ) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException(
+        ErrorCode.USER_NOT_FOUND,
+        'Người dùng không tồn tại',
+      );
+    }
+
+    if (!user.firstLogin) {
+      throw new ForbiddenException(
+        ErrorCode.FORBIDDEN,
+        'Tài khoản đã đổi mật khẩu lần đầu',
+      );
+    }
+
+    user.password = await bcrypt.hash(dto.newPassword, 10);
+    user.passwordChangedAt = new Date();
+    user.firstLogin = false;
+    user.updatedBy = userId;
+    await this.userRepo.save(user);
+
+    await this.userDevicesService.revokeAllByUser(
+      user.id,
+      RevokedReason.PASSWORD_CHANGE,
+    );
+
+    void this.auditLogService.recordLogin({
+      userId: user.id,
+      username: user.username,
+      action: LoginAction.CHANGE_PASSWORD,
+      success: true,
+      ipAddress: client.ip,
+      userAgent: client.userAgent,
+      deviceId: client.deviceId,
+    });
+
+    return; // 204
   }
 
   // ===== CHANGE PASSWORD =====
@@ -436,7 +528,17 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
     await this.userRepo.update(
       { id: userId },
-      { password: hashedPassword, updatedBy: userId },
+      {
+        password: hashedPassword,
+        updatedBy: userId,
+        firstLogin: false,
+        passwordChangedAt: new Date(),
+      },
+    );
+
+    await this.userDevicesService.revokeAllByUser(
+      userId,
+      RevokedReason.PASSWORD_CHANGE,
     );
 
     void this.auditLogService.recordLogin({
@@ -466,6 +568,7 @@ export class AuthService {
     return {
       user,
       permissions,
+      firstLogin: user.firstLogin,
     };
   }
 
@@ -490,6 +593,7 @@ export class AuthService {
       avatarUrl: user.avatarUrl,
       role: user.role?.name,
       permissions,
+      firstLogin: user.firstLogin,
     };
   }
 

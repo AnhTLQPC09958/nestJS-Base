@@ -7,6 +7,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { PASSWORD_MESSAGE, PASSWORD_REGEX } from 'src/common/utils/utils';
 
 export class LoginDto {
   @IsString()
@@ -16,7 +17,7 @@ export class LoginDto {
 
   @IsString()
   @IsNotEmpty({ message: 'Mật khẩu không được để trống' })
-  @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự' })
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
   @MaxLength(100)
   password!: string;
 }
@@ -44,6 +45,14 @@ export class ResetPasswordDto {
   @IsString()
   @MinLength(8, { message: 'Mật khẩu phải có ít nhất 8 ký tự' })
   @MaxLength(100)
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
+  newPassword!: string;
+}
+
+export class FirstChangePasswordDto {
+  @IsString()
+  @MinLength(8)
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
   newPassword!: string;
 }
 
@@ -54,6 +63,7 @@ export class ChangePasswordDto {
 
   @IsString()
   @MinLength(8, { message: 'Mật khẩu mới phải có ít nhất 8 ký tự' })
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
   @MaxLength(100)
   newPassword!: string;
 }

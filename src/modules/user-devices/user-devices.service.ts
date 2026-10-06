@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { UserDevice } from './entities/user-device.entity';
 import { UserDeviceResponseDto } from './dto/user-device-response.dto';
+import { RevokedTokensService } from '../revoked-tokens/revoked-tokens.service';
 
 export interface UpsertSessionParams {
   userId: number;
@@ -16,12 +17,13 @@ export interface UpsertSessionParams {
   ipAddress: string | null;
 }
 
-// const REVOKE_REASON = {
-//   LOGOUT: 'logout',
-//   FORCE_LOGOUT: 'force_logout',
-//   ADMIN_REVOKE: 'admin_revoke',
-//   EXPIRED: 'expired',
-// } as const;
+export enum RevokedReason {
+  LOGOUT = 'logout',
+  PASSWORD_RESET = 'passwordReset',
+  PASSWORD_CHANGE = 'passwordChange',
+  ADMIN_REVOKE = 'adminRevoke',
+  FORCE_LOGOUT = 'FORCE_LOGOUT',
+}
 
 @Injectable()
 export class UserDevicesService {
@@ -31,6 +33,7 @@ export class UserDevicesService {
     @InjectRepository(UserDevice)
     private readonly repo: Repository<UserDevice>,
     private readonly config: ConfigService,
+    private readonly revokedTokensService: RevokedTokensService,
   ) {}
 
   /**
@@ -73,27 +76,6 @@ export class UserDevicesService {
     return this.repo.save(row);
   }
 
-  /** Refresh: rotate jti mới, update lastActiveAt + expiresAt */
-  async rotateSession(
-    userId: number,
-    deviceId: string,
-    newJti: string,
-  ): Promise<void> {
-    const refreshExpiresIn = this.config.getOrThrow<StringValue>(
-      'jwt.refreshExpiresIn',
-    );
-    const expiresAt = new Date(Date.now() + ms(refreshExpiresIn));
-
-    await this.repo.update(
-      { userId, deviceId, isActive: true },
-      {
-        jti: newJti,
-        lastActiveAt: new Date(),
-        expiresAt,
-      },
-    );
-  }
-
   /**
    * Verify refresh: tìm row active theo (userId, deviceId, jti).
    * Trả null nếu không có → refresh fail.
@@ -125,7 +107,7 @@ export class UserDevicesService {
   async revokeByDevice(
     userId: number,
     deviceId: string,
-    reason = 'logout',
+    reason = RevokedReason.LOGOUT,
   ): Promise<UserDevice | null> {
     const row = await this.repo.findOne({
       where: { userId, deviceId, isActive: true },
@@ -144,7 +126,7 @@ export class UserDevicesService {
   async revokeById(
     id: number,
     userId: number,
-    reason = 'admin_revoke',
+    reason = RevokedReason.ADMIN_REVOKE,
   ): Promise<UserDevice | null> {
     const row = await this.repo.findOne({
       where: { id, userId, isActive: true },
@@ -163,7 +145,7 @@ export class UserDevicesService {
   async revokeAllExcept(
     userId: number,
     exceptDeviceId: string,
-    reason = 'force_logout',
+    reason = RevokedReason.FORCE_LOGOUT,
   ): Promise<UserDevice[]> {
     const rows = await this.repo.find({
       where: { userId, isActive: true },
@@ -179,6 +161,35 @@ export class UserDevicesService {
     });
 
     return toRevoke;
+  }
+
+  async revokeAllByUser(userId: number, reason: string): Promise<number> {
+    const devices = await this.repo.find({
+      where: { userId, isActive: true },
+    });
+    if (devices.length === 0) return 0;
+
+    const validDevices = devices.filter(
+      (device): device is UserDevice & { jti: string } => !!device.jti,
+    );
+
+    if (validDevices.length > 0) {
+      await this.revokedTokensService.revokeMany(
+        validDevices.map((device) => ({
+          jti: device.jti,
+          userId,
+          deviceId: device.deviceId,
+          revokedReason: reason,
+        })),
+      );
+    }
+
+    await this.repo.update(
+      { userId, isActive: true },
+      { isActive: false, revokedAt: new Date(), revokedReason: reason },
+    );
+
+    return devices.length;
   }
 
   /** Refresh: update lastActiveAt + expiresAt, KHÔNG đổi jti */

@@ -14,6 +14,13 @@ export interface RevokeParams {
   reason: string;
 }
 
+export interface RevokeManyItem {
+  jti: string;
+  userId: number;
+  deviceId: string;
+  revokedReason: string;
+}
+
 @Injectable()
 export class RevokedTokensService {
   private readonly logger = new Logger(RevokedTokensService.name);
@@ -59,6 +66,45 @@ export class RevokedTokensService {
       this.logger.error(
         `Ghi revoked_token thất bại (jti=${params.jti}): ${(err as Error).message}`,
       );
+    }
+  }
+
+  async revokeMany(items: RevokeManyItem[]): Promise<void> {
+    if (items.length === 0) return;
+
+    const accessExpiresIn = this.config.getOrThrow<StringValue>(
+      'jwt.accessExpiresIn',
+    );
+    const expiresAt = new Date(Date.now() + ms(accessExpiresIn));
+
+    try {
+      await this.repo.insert(
+        items.map((i) => ({
+          jti: i.jti,
+          userId: i.userId,
+          deviceId: i.deviceId,
+          revokedReason: i.revokedReason,
+          expiresAt,
+          revokedAt: new Date(),
+        })),
+      );
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'ER_DUP_ENTRY') {
+        await Promise.all(
+          items.map((i) =>
+            this.revoke({
+              jti: i.jti,
+              userId: i.userId,
+              deviceId: i.deviceId,
+              reason: i.revokedReason,
+            }),
+          ),
+        );
+        return;
+      }
+      this.logger.error(`revokeMany thất bại: ${(err as Error).message}`);
+      throw err;
     }
   }
 

@@ -92,6 +92,7 @@ export class UsersService {
           password: hashedPassword,
           avatarUrl: dto.avatarUrl,
           status: dto.status,
+          firstLogin: true,
           roleId: dto.roleId ?? null,
           createdBy: actorId,
           updatedBy: actorId,

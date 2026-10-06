@@ -28,6 +28,12 @@ export class User extends BaseEntity {
   @Column({ type: 'enum', enum: UserStatus, default: UserStatus.ACTIVE })
   status!: UserStatus;
 
+  @Column({ name: 'first_login', type: 'boolean', default: false })
+  firstLogin!: boolean;
+
+  @Column({ name: 'password_changed_at', type: 'datetime', nullable: true })
+  passwordChangedAt?: Date | null;
+
   @Column({ name: 'role_id', type: 'int', nullable: true })
   roleId!: number | null;
 

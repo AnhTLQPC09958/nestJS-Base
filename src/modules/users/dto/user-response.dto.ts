@@ -1,5 +1,6 @@
 import { User, UserStatus } from '../entities/user.entity';
 import { RoleOptionDto } from '../../roles/dto/role-response.dto';
+import { Expose } from 'class-transformer';
 
 export class UserResponseDto {
   id!: number;
@@ -14,6 +15,10 @@ export class UserResponseDto {
   updatedBy!: number | null;
   createdAt!: Date;
   updatedAt!: Date;
+  @Expose()
+  firstLogin!: boolean;
+  @Expose()
+  passwordChangedAt!: Date | null;
 
   static fromEntity(user: User): UserResponseDto {
     return {
@@ -23,6 +28,8 @@ export class UserResponseDto {
       phone: user.phone,
       avatarUrl: user.avatarUrl,
       status: user.status,
+      firstLogin: user.firstLogin,
+      passwordChangedAt: user.passwordChangedAt ?? null,
       roleId: user.roleId,
       role: user.role ? RoleOptionDto.fromEntity(user.role) : null,
       createdBy: user.createdBy,
