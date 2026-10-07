@@ -105,7 +105,7 @@ export class OtpService {
    * Cleanup OTP hết hạn — chạy mỗi giờ.
    * Xóa OTP đã hết hạn > 24h.
    */
-  @Cron(CronExpression.EVERY_WEEKDAY)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async cleanupExpired(): Promise<void> {
     const cutoff = new Date(
       Date.now() - OTP_CLEANUP_RETENTION_HOURS * 60 * 60 * 1000,

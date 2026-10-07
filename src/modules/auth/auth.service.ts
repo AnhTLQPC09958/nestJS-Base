@@ -317,7 +317,13 @@ export class AuthService {
       deviceId,
       RevokedReason.LOGOUT,
     );
-
+    if (!deviceId) {
+      throw new CoreException(
+        ErrorCode.VALIDATION_FAILED,
+        'Thiếu header device-id',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     // 2. Revoke jti → blacklist access token hiện tại
     if (device?.jti) {
       await this.revokedTokensService.revoke({
