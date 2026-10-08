@@ -15,11 +15,12 @@ import { UploadModule } from './modules/upload/upload.module';
 import { MailModule } from './modules/mail/mail.module';
 import { OtpModule } from './modules/otp/otp.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import { HealthModule } from './modules/health/heal.module';
+import { HealthModule } from './modules/health/health.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { AuditLogInterceptor } from './modules/audit-log/interceptors/audit-log.interceptor';
+import { TransformInterceptor } from './common/interceptors';
 import { UserDevicesModule } from './modules/user-devices/user-devices.module';
 import { RevokedTokensModule } from './modules/revoked-tokens/revoked-tokens.module';
 @Module({
@@ -45,7 +46,6 @@ import { RevokedTokensModule } from './modules/revoked-tokens/revoked-tokens.mod
     AuthModule,
     MailModule,
     UploadModule,
-    MailModule,
     OtpModule,
     HealthModule,
     AuditLogModule,
@@ -60,6 +60,7 @@ import { RevokedTokensModule } from './modules/revoked-tokens/revoked-tokens.mod
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
   ],
 })
 export class AppModule {}

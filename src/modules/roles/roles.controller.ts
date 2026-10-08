@@ -23,7 +23,7 @@ export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
   @Get()
-  @CheckPermission('vai-tro', PermissionAction.SHOW_MENU)
+  @CheckPermission('vai-tro', PermissionAction.INDEX)
   findAll(@Paginate() query: PaginateQuery) {
     return this.rolesService.findAll(query);
   }

@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 import helmet from 'helmet';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -71,10 +72,45 @@ async function bootstrap() {
   // ===== Disable x-powered-by =====
   app.disable('x-powered-by');
 
+  // ===== Swagger OpenAPI =====
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Core Base API')
+    .setDescription('Hệ thống tài liệu API và API Playground')
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        description: 'Nhập Access Token (Bearer)',
+        in: 'header',
+      },
+      'JWT-auth',
+    )
+    .addApiKey(
+      {
+        type: 'apiKey',
+        name: 'device-id',
+        in: 'header',
+        description: 'Device ID của client (UUID/string)',
+      },
+      'device-id',
+    )
+    .build();
+
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, swaggerDocument, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
+
   const port = configService.get<number>('app.port') ?? 3000;
 
   await app.listen(port);
   console.log(`***** App running *****: http://localhost:${port}`);
+  console.log(`📑 Swagger Docs: http://localhost:${port}/api/docs`);
   console.log(`📁 Uploads served at: /uploads/*`);
   console.log(
     `***** CORS allowed *****: ${configService.get<string[]>('cors.origins')?.join(', ')}`,

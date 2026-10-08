@@ -6,8 +6,8 @@ export class UserResponseDto {
   id!: number;
   username!: string;
   email!: string;
-  phone?: string;
-  avatarUrl?: string;
+  phone?: string | null;
+  avatarUrl?: string | null;
   status!: UserStatus;
   roleId!: number | null;
   role!: RoleOptionDto | null;
@@ -25,8 +25,8 @@ export class UserResponseDto {
       id: user.id,
       username: user.username,
       email: user.email,
-      phone: user.phone,
-      avatarUrl: user.avatarUrl,
+      phone: user.phone ?? null,
+      avatarUrl: user.avatarUrl ?? null,
       status: user.status,
       firstLogin: user.firstLogin,
       passwordChangedAt: user.passwordChangedAt ?? null,

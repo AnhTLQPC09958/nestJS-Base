@@ -12,12 +12,14 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { MailModule } from '../mail/mail.module';
 import { OtpModule } from '../otp/otp.module';
 import { UserDevicesModule } from '../user-devices/user-devices.module';
+import { RolePermissionsModule } from '../role-permissions/role-permissions.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, RolePermission]),
     MailModule,
     OtpModule,
     UserDevicesModule,
+    RolePermissionsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

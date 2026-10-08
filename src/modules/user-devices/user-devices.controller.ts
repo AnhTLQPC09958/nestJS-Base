@@ -42,18 +42,19 @@ export class UserDevicesController {
     const rows = await this.service.revokeAllExcept(userId, deviceId);
 
     // Blacklist jti của từng device bị revoke
-    await Promise.all(
-      rows
-        .filter((r) => r.jti)
-        .map((r) =>
-          this.revokedTokensService.revoke({
-            jti: r.jti!,
-            userId,
-            deviceId: r.deviceId,
-            reason: 'force_logout',
-          }),
-        ),
+    const validRows = rows.filter(
+      (r): r is typeof r & { jti: string } => !!r.jti,
     );
+    if (validRows.length > 0) {
+      await this.revokedTokensService.revokeMany(
+        validRows.map((r) => ({
+          jti: r.jti,
+          userId,
+          deviceId: r.deviceId,
+          revokedReason: 'force_logout',
+        })),
+      );
+    }
 
     return { revoked: rows.length };
   }

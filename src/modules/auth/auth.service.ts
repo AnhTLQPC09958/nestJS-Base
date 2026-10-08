@@ -35,6 +35,7 @@ import {
   UserDevicesService,
 } from '../user-devices/user-devices.service';
 import { RevokedTokensService } from '../revoked-tokens/revoked-tokens.service';
+import { RolePermissionsService } from '../role-permissions/role-permissions.service';
 
 export interface LoginResult {
   accessToken: string;
@@ -63,7 +64,23 @@ export class AuthService {
     private readonly auditLogService: AuditLogService,
     private readonly userDevicesService: UserDevicesService,
     private readonly revokedTokensService: RevokedTokensService,
+    private readonly rolePermissionsService: RolePermissionsService,
   ) {}
+
+  // Cache in-memory cho AuthUser để giảm thiểu tối đa SQL query trên mỗi request
+  private readonly authUserCache = new Map<
+    number,
+    { user: User; expiresAt: number }
+  >();
+  private readonly USER_CACHE_TTL_MS = 30 * 1000; // 30 giây
+
+  // Chống Brute Force đăng nhập sai quá nhiều lần
+  private readonly loginAttempts = new Map<
+    string,
+    { count: number; lockedUntil: number }
+  >();
+  private readonly MAX_LOGIN_ATTEMPTS = 5;
+  private readonly LOCKOUT_TIME_MS = 15 * 60 * 1000; // 15 phút
 
   // ===== LOGIN =====
   async login(
@@ -71,6 +88,18 @@ export class AuthService {
     deviceId: string,
     client: ClientInfo,
   ): Promise<LoginResult> {
+    const usernameKey = dto.username.toLowerCase();
+    const attempt = this.loginAttempts.get(usernameKey);
+    const now = Date.now();
+
+    if (attempt && attempt.lockedUntil > now) {
+      const remainingMinutes = Math.ceil((attempt.lockedUntil - now) / 60000);
+      throw new ForbiddenException(
+        ErrorCode.AUTH_ACCOUNT_BANNED,
+        `Tài khoản tạm thời bị khóa do nhập sai mật khẩu quá 5 lần. Vui lòng thử lại sau ${remainingMinutes} phút.`,
+      );
+    }
+
     const user = await this.userRepo
       .createQueryBuilder('u')
       .addSelect('u.password')
@@ -96,6 +125,17 @@ export class AuthService {
 
     const isMatch = await bcrypt.compare(dto.password, user.password);
     if (!isMatch) {
+      const currentAttempts = (attempt?.count ?? 0) + 1;
+      const lockedUntil =
+        currentAttempts >= this.MAX_LOGIN_ATTEMPTS
+          ? now + this.LOCKOUT_TIME_MS
+          : 0;
+
+      this.loginAttempts.set(usernameKey, {
+        count: currentAttempts,
+        lockedUntil,
+      });
+
       void this.auditLogService.recordLogin({
         userId: user.id,
         username: user.username,
@@ -106,11 +146,22 @@ export class AuthService {
         userAgent: client.userAgent,
         deviceId: client.deviceId,
       });
+
+      if (currentAttempts >= this.MAX_LOGIN_ATTEMPTS) {
+        throw new ForbiddenException(
+          ErrorCode.AUTH_ACCOUNT_BANNED,
+          'Bạn đã nhập sai mật khẩu quá 5 lần liên tiếp. Tài khoản tạm khóa đăng nhập trong 15 phút.',
+        );
+      }
+
       throw new UnauthorizedException(
         ErrorCode.AUTH_INVALID_CREDENTIALS,
-        'Sai tên đăng nhập hoặc mật khẩu',
+        `Sai tên đăng nhập hoặc mật khẩu (còn ${this.MAX_LOGIN_ATTEMPTS - currentAttempts} lần thử)`,
       );
     }
+
+    // Đăng nhập thành công -> xóa bỏ theo dõi lỗi
+    this.loginAttempts.delete(usernameKey);
 
     if (user.status === UserStatus.BANNED) {
       void this.auditLogService.recordLogin({
@@ -177,7 +228,7 @@ export class AuthService {
     });
 
     // Gom permission của user
-    const permissions = await this.getUserPermission(user.id);
+    const permissions = await this.getUserPermission(user.roleId);
 
     // Upsert session (jti mới, đảm bảo mỗi device chỉ có 1 row active)
     await this.userDevicesService.upsertSession({
@@ -311,12 +362,6 @@ export class AuthService {
 
   // ===== LOGOUT =====
   async logout(userId: number, deviceId: string): Promise<void> {
-    // 1. Update user_devices is_active=0
-    const device = await this.userDevicesService.revokeByDevice(
-      userId,
-      deviceId,
-      RevokedReason.LOGOUT,
-    );
     if (!deviceId) {
       throw new CoreException(
         ErrorCode.VALIDATION_FAILED,
@@ -324,6 +369,13 @@ export class AuthService {
         HttpStatus.BAD_REQUEST,
       );
     }
+
+    // 1. Update user_devices is_active=0
+    const device = await this.userDevicesService.revokeByDevice(
+      userId,
+      deviceId,
+      RevokedReason.LOGOUT,
+    );
     // 2. Revoke jti → blacklist access token hiện tại
     if (device?.jti) {
       await this.revokedTokensService.revoke({
@@ -334,7 +386,8 @@ export class AuthService {
       });
     }
 
-    // 3. Audit log
+    // 3. Audit log & clear cache
+    this.clearAuthUserCache(userId);
     void this.auditLogService.recordLogin({
       userId,
       username: null,
@@ -445,6 +498,7 @@ export class AuthService {
       deviceId: client.deviceId,
     });
     await this.userDevicesService.revokeAllByUser(user.id, 'passwordReset');
+    this.clearAuthUserCache(user.id);
   }
 
   // ===== FIRST CHANGE PASSWORD =====
@@ -479,6 +533,7 @@ export class AuthService {
       user.id,
       RevokedReason.PASSWORD_CHANGE,
     );
+    this.clearAuthUserCache(user.id);
 
     void this.auditLogService.recordLogin({
       userId: user.id,
@@ -546,6 +601,7 @@ export class AuthService {
       userId,
       RevokedReason.PASSWORD_CHANGE,
     );
+    this.clearAuthUserCache(userId);
 
     void this.auditLogService.recordLogin({
       userId: user.id,
@@ -569,7 +625,22 @@ export class AuthService {
         'Người dùng không tồn tại',
       );
     }
-    const permissions = await this.getUserPermission(userId);
+
+    if (user.status === UserStatus.BANNED) {
+      throw new ForbiddenException(
+        ErrorCode.AUTH_ACCOUNT_BANNED,
+        'Tài khoản đã bị khoá',
+      );
+    }
+
+    if (user.status === UserStatus.INACTIVE) {
+      throw new ForbiddenException(
+        ErrorCode.AUTH_ACCOUNT_INACTIVE,
+        'Tài khoản chưa kích hoạt',
+      );
+    }
+
+    const permissions = await this.getUserPermission(user.roleId);
 
     return {
       user,
@@ -578,18 +649,60 @@ export class AuthService {
     };
   }
 
+  clearAuthUserCache(userId?: number): void {
+    if (userId !== undefined) {
+      this.authUserCache.delete(userId);
+    } else {
+      this.authUserCache.clear();
+    }
+  }
+
   async buildAuthUser(userId: number, deviceId: string): Promise<AuthUser> {
-    const user = await this.userRepo.findOne({
-      where: { id: userId },
-      relations: { role: true },
-    });
+    const now = Date.now();
+    const cached = this.authUserCache.get(userId);
+    let user: User | null = null;
+
+    if (cached && cached.expiresAt > now) {
+      user = cached.user;
+    } else {
+      user = await this.userRepo.findOne({
+        where: { id: userId },
+        relations: { role: true },
+      });
+
+      if (user) {
+        this.authUserCache.set(userId, {
+          user,
+          expiresAt: now + this.USER_CACHE_TTL_MS,
+        });
+      }
+    }
+
     if (!user) {
+      this.authUserCache.delete(userId);
       throw new UnauthorizedException(
         ErrorCode.UNAUTHORIZED,
         'Người dùng không tồn tại',
       );
     }
-    const permissions = await this.getUserPermission(userId);
+
+    if (user.status === UserStatus.BANNED) {
+      this.authUserCache.delete(userId);
+      throw new ForbiddenException(
+        ErrorCode.AUTH_ACCOUNT_BANNED,
+        'Tài khoản đã bị khoá',
+      );
+    }
+
+    if (user.status === UserStatus.INACTIVE) {
+      this.authUserCache.delete(userId);
+      throw new ForbiddenException(
+        ErrorCode.AUTH_ACCOUNT_INACTIVE,
+        'Tài khoản chưa kích hoạt',
+      );
+    }
+
+    const permissions = await this.getUserPermission(user.roleId);
 
     return {
       id: user.id,
@@ -603,27 +716,11 @@ export class AuthService {
     };
   }
 
-  private async getUserPermission(userId: number): Promise<PermissionsMap> {
-    const user = await this.userRepo.findOne({
-      where: { id: userId },
-      select: { id: true, roleId: true },
-    });
-    if (!user?.roleId) return {};
-
-    const rolePerms = await this.rolePermissionRepo
-      .createQueryBuilder('rp')
-      .innerJoinAndSelect('rp.permission', 'p')
-      .where('rp.roleId = :roleId', { roleId: user.roleId })
-      .getMany();
-
-    const map: PermissionsMap = {};
-    for (const rp of rolePerms) {
-      const { moduleKey, action } = rp.permission;
-      if (!map[moduleKey]) map[moduleKey] = [];
-      if (!map[moduleKey].includes(action)) map[moduleKey].push(action);
-    }
-
-    return map;
+  private async getUserPermission(
+    roleId?: number | null,
+  ): Promise<PermissionsMap> {
+    if (!roleId) return {};
+    return this.rolePermissionsService.getPermissionsByRoleId(roleId);
   }
 }
 export type { PermissionsMap };

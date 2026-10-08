@@ -9,6 +9,7 @@ export interface PaginatedMeta {
 export interface PaginatedLinks {
   first?: string;
   previous?: string;
+  current?: string;
   next?: string;
   last?: string;
 }

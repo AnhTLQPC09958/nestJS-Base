@@ -3,7 +3,8 @@ import { Role } from '../entities/role.entity';
 export class RoleResponseDto {
   id!: number;
   name!: string;
-  description?: string;
+  description?: string | null;
+  isSystem?: boolean;
   createdBy!: number | null;
   updatedBy!: number | null;
   createdAt!: Date;
@@ -13,7 +14,8 @@ export class RoleResponseDto {
     return {
       id: role.id,
       name: role.name,
-      description: role.description,
+      description: role.description ?? null,
+      isSystem: role.isSystem ?? false,
       createdBy: role.createdBy,
       updatedBy: role.updatedBy,
       createdAt: role.createdAt,

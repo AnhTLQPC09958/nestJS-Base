@@ -22,9 +22,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         // Tự động load entity từ mọi module đã import TypeOrmModule.forFeautre
         autoLoadEntities: true,
 
-        // Chỉ phật synchronize ở dev
-        // synchronize: config.get<string>('app.nodeEnv') === 'development',
-        synchronize: true,
+        // Chỉ bật synchronize ở dev
+        synchronize:
+          config.get<string>('app.nodeEnv') === 'development' &&
+          process.env.DB_SYNCHRONIZE !== 'false',
 
         // Log query khi dev
         // logging:
@@ -33,6 +34,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         //     : ['error'],
 
         timezone: '+07:00',
+        extra: {
+          connectionLimit: 25,
+        },
       }),
     }),
   ],

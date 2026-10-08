@@ -88,7 +88,9 @@ export class AuditLogService {
       },
     });
 
-    return toPaginatedResponse(result, AuditLogResponseDto.fromEntity);
+    return toPaginatedResponse(result, (item) =>
+      AuditLogResponseDto.fromEntity(item),
+    );
   }
 
   async findLoginLogs(
@@ -109,7 +111,9 @@ export class AuditLogService {
       },
     });
 
-    return toPaginatedResponse(result, LoginLogResponseDto.fromEntity);
+    return toPaginatedResponse(result, (item) =>
+      LoginLogResponseDto.fromEntity(item),
+    );
   }
 
   async findOne(id: number): Promise<AuditLogResponseDto | null> {

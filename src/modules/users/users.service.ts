@@ -89,6 +89,7 @@ export class UsersService {
         manager.create(User, {
           username: dto.username,
           email: dto.email,
+          phone: dto.phone,
           password: hashedPassword,
           avatarUrl: dto.avatarUrl,
           status: dto.status,
@@ -117,6 +118,19 @@ export class UsersService {
       );
     }
 
+    if (dto.username && dto.username !== user.username) {
+      const exists = await this.userRepo.findOne({
+        where: { username: dto.username },
+      });
+      if (exists) {
+        throw new CoreException(
+          ErrorCode.USER_USERNAME_DUPLICATED,
+          'Tên đăng nhập đã tồn tại',
+          HttpStatus.CONFLICT,
+        );
+      }
+    }
+
     if (dto.email && dto.email !== user.email) {
       const exists = await this.userRepo.findOne({
         where: { email: dto.email },
@@ -135,6 +149,7 @@ export class UsersService {
       Object.assign(user, {
         username: dto.username ?? user.username,
         email: dto.email ?? user.email,
+        phone: dto.phone !== undefined ? dto.phone : user.phone,
         avatarUrl: dto.avatarUrl ?? user.avatarUrl,
         status: dto.status ?? user.status,
         roleId: dto.roleId === undefined ? user.roleId : dto.roleId,

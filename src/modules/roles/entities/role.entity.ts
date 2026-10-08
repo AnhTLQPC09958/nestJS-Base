@@ -8,4 +8,7 @@ export class Role extends BaseEntity {
 
   @Column({ nullable: true, length: 255 })
   description?: string;
+
+  @Column({ name: 'is_system', type: 'boolean', default: false })
+  isSystem!: boolean;
 }

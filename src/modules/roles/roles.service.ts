@@ -16,6 +16,9 @@ import { PaginatedResponse } from '../../common/types';
 import { toPaginatedResponse } from '../../common/utils';
 import { RolePermission } from '../role-permissions/entities/role-permission.entity';
 import { Permission } from '../permissions/entities/permission.entity';
+import { RolePermissionsService } from '../role-permissions/role-permissions.service';
+import { User } from '../users/entities/user.entity';
+
 @Injectable()
 export class RolesService {
   constructor(
@@ -25,6 +28,9 @@ export class RolesService {
     private readonly rolePermissionRepo: Repository<RolePermission>,
     @InjectRepository(Permission)
     private readonly permissionRepo: Repository<Permission>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    private readonly rolePermissionsService: RolePermissionsService,
   ) {}
 
   async findAll(
@@ -41,7 +47,9 @@ export class RolesService {
       },
     });
 
-    return toPaginatedResponse(result, RoleResponseDto.fromEntity);
+    return toPaginatedResponse(result, (role) =>
+      RoleResponseDto.fromEntity(role),
+    );
   }
 
   async findOne(id: number): Promise<RoleResponseDto> {
@@ -61,7 +69,7 @@ export class RolesService {
       order: { name: 'ASC' },
       select: { id: true, name: true },
     });
-    return roles.map(RoleOptionDto.fromEntity);
+    return roles.map((role) => RoleOptionDto.fromEntity(role));
   }
 
   async create(dto: CreateRoleDto, actorId: number): Promise<RoleResponseDto> {
@@ -142,7 +150,28 @@ export class RolesService {
         'Vai trò không tồn tại',
       );
     }
+
+    if (role.isSystem || role.name.toLowerCase() === 'admin') {
+      throw new CoreException(
+        ErrorCode.FORBIDDEN,
+        'Không thể xoá vai trò mặc định của hệ thống',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const assignedUserCount = await this.userRepo.count({
+      where: { roleId: id },
+    });
+    if (assignedUserCount > 0) {
+      throw new CoreException(
+        ErrorCode.VALIDATION_FAILED,
+        `Không thể xoá: Vai trò đang được gán cho ${assignedUserCount} người dùng trong hệ thống`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     await this.roleRepo.remove(role);
+    this.rolePermissionsService.clearCache(id);
   }
 
   // ============ GET ROLE PERMISSIONS ============
@@ -215,6 +244,8 @@ export class RolesService {
         );
       }
     });
+
+    this.rolePermissionsService.clearCache(id);
 
     return { roleId: id, permissionIds };
   }

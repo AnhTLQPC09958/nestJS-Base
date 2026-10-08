@@ -6,12 +6,9 @@ import {
   MemoryHealthIndicator,
   DiskHealthIndicator,
 } from '@nestjs/terminus';
-import { Public } from '../../common/decorators';
+import { Public, BypassTransform } from '../../common/decorators';
 
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/** */
+@BypassTransform()
 @Controller('health')
 export class HealthController {
   constructor(

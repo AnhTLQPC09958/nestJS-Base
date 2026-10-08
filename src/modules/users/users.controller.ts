@@ -23,7 +23,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @CheckPermission('nguoi-dung', PermissionAction.SHOW_MENU)
+  @CheckPermission('nguoi-dung', PermissionAction.INDEX)
   findAll(@Paginate() query: PaginateQuery) {
     return this.usersService.findAll(query);
   }

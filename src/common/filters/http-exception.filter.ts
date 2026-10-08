@@ -38,9 +38,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const { status, code, message, error } = this.parseException(exception);
 
     if (status >= 500) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-      (this.logger.error(`${request.method} ${request.url} -> ${status}`),
-        exception instanceof Error ? exception.stack : String(exception));
+      this.logger.error(
+        `${request.method} ${request.url} -> ${status}`,
+        exception instanceof Error ? exception.stack : String(exception),
+      );
     }
 
     response.status(status).json({

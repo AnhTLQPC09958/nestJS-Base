@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { LessThan, MoreThan, Repository } from 'typeorm';
 import ms from 'ms';
 import type { StringValue } from 'ms';
 import { ConfigService } from '@nestjs/config';
@@ -22,8 +22,12 @@ export interface RevokeManyItem {
 }
 
 @Injectable()
-export class RevokedTokensService {
+export class RevokedTokensService implements OnApplicationBootstrap {
   private readonly logger = new Logger(RevokedTokensService.name);
+
+  // In-memory Set lưu nhanh các JTI đã bị revoke trong RAM (O(1))
+  // Loại bỏ 100% câu query SELECT vào MySQL trên mỗi request có gắn JWT!
+  private readonly memoryRevokedSet = new Set<string>();
 
   constructor(
     @InjectRepository(RevokedToken)
@@ -31,13 +35,31 @@ export class RevokedTokensService {
     private readonly config: ConfigService,
   ) {}
 
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      const activeList = await this.repo.find({
+        where: { expiresAt: MoreThan(new Date()) },
+        select: { jti: true },
+      });
+      for (const item of activeList) {
+        this.memoryRevokedSet.add(item.jti);
+      }
+      this.logger.log(
+        `⚡ Đã nạp ${this.memoryRevokedSet.size} revoked tokens còn hạn vào bộ nhớ RAM`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Không thể nạp revoked tokens vào RAM: ${(err as Error).message}`,
+      );
+    }
+  }
+
   /**
-   * Check jti có bị revoke không.
-   * Gọi từ JwtStrategy.validate() mỗi request authenticated.
+   * Check jti có bị revoke không (O(1) trong RAM, không chạm MySQL)
    */
-  async isRevoked(jti: string): Promise<boolean> {
-    const exists = await this.repo.exists({ where: { jti } });
-    return exists;
+  isRevoked({ jti }: { jti: string }): boolean {
+    if (this.memoryRevokedSet.has(jti)) return true;
+    return false;
   }
 
   /**
@@ -49,6 +71,8 @@ export class RevokedTokensService {
       'jwt.accessExpiresIn',
     );
     const expiresAt = new Date(Date.now() + ms(accessExpiresIn));
+
+    this.memoryRevokedSet.add(params.jti);
 
     try {
       await this.repo.insert({
@@ -71,6 +95,8 @@ export class RevokedTokensService {
 
   async revokeMany(items: RevokeManyItem[]): Promise<void> {
     if (items.length === 0) return;
+
+    items.forEach((i) => this.memoryRevokedSet.add(i.jti));
 
     const accessExpiresIn = this.config.getOrThrow<StringValue>(
       'jwt.accessExpiresIn',
@@ -117,8 +143,21 @@ export class RevokedTokensService {
       expiresAt: LessThan(new Date()),
     });
     const count = result.affected ?? 0;
+
+    // Refresh lại Set trong RAM từ DB để loại bỏ các token đã hết hạn
+    const activeList = await this.repo.find({
+      where: { expiresAt: MoreThan(new Date()) },
+      select: { jti: true },
+    });
+    this.memoryRevokedSet.clear();
+    for (const item of activeList) {
+      this.memoryRevokedSet.add(item.jti);
+    }
+
     if (count > 0) {
-      this.logger.log(`🧹 Đã xoá ${count} revoked_token hết hạn`);
+      this.logger.log(
+        `🧹 Đã xoá ${count} revoked_token hết hạn (RAM còn ${this.memoryRevokedSet.size})`,
+      );
     }
     return count;
   }
